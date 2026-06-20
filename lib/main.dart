@@ -11,6 +11,8 @@ import 'screens/auth/login_screen.dart';
 import 'screens/auth/otp_screen.dart';
 import 'screens/auth/profile_setup_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/student_management/student_management_screen.dart';
+import 'screens/student_management/qr_card_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +50,7 @@ class SafeKidApp extends StatelessWidget {
               create: (_) => AuthProvider(appState.authRepository),
             ),
             ChangeNotifierProvider<LocationProvider>(
-              create: (_) => LocationProvider(appState.locationRepository),
+              create: (_) => LocationProvider(appState.tripRepository),
             ),
             ChangeNotifierProvider<AttendanceProvider>(
               create: (_) => AttendanceProvider(appState.studentRepository),
@@ -63,6 +65,8 @@ class SafeKidApp extends StatelessWidget {
               AppConstants.routeSplash: (context) => const SplashScreen(),
               AppConstants.routeLogin: (context) => const LoginScreen(),
               AppConstants.routeHome: (context) => const HomeScreen(),
+              AppConstants.routeStudentManagement: (context) => const StudentManagementScreen(),
+              AppConstants.routeQrCard: (context) => const QrCardScreen(),
               '/otp': (context) => const OtpScreen(),
               '/profile-setup': (context) => const ProfileSetupScreen(),
             },

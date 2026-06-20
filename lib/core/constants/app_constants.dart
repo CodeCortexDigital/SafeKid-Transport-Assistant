@@ -10,6 +10,8 @@ class AppConstants {
   static const String routeSplash = '/';
   static const String routeLogin = '/login';
   static const String routeHome = '/home';
+  static const String routeStudentManagement = '/student-management';
+  static const String routeQrCard = '/qr-card';
 
   // Firestore Collection Names
   static const String usersCollection = 'users';

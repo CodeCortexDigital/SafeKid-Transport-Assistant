@@ -1,45 +1,48 @@
-enum RideStatus {
+enum TripStatus {
   scheduled,
   active,
   completed,
   cancelled,
 }
 
-class RideModel {
+class TripModel {
   final String id;
-  final String driverUid;
+  final String vehicleId;
+  final String driverId;
   final String routeName;
   final List<String> studentIds;
   final double currentLatitude;
   final double currentLongitude;
-  final RideStatus status;
   final String etaMinutes;
+  final TripStatus status;
   final DateTime? startTime;
   final DateTime? endTime;
 
-  RideModel({
+  TripModel({
     required this.id,
-    required this.driverUid,
+    required this.vehicleId,
+    required this.driverId,
     required this.routeName,
     required this.studentIds,
     required this.currentLatitude,
     required this.currentLongitude,
-    required this.status,
     required this.etaMinutes,
+    required this.status,
     this.startTime,
     this.endTime,
   });
 
-  factory RideModel.fromJson(Map<String, dynamic> json, String docId) {
-    return RideModel(
+  factory TripModel.fromJson(Map<String, dynamic> json, String docId) {
+    return TripModel(
       id: docId,
-      driverUid: json['driverUid'] ?? '',
+      vehicleId: json['vehicleId'] ?? '',
+      driverId: json['driverId'] ?? '',
       routeName: json['routeName'] ?? '',
       studentIds: json['studentIds'] != null ? List<String>.from(json['studentIds']) : [],
       currentLatitude: (json['currentLatitude'] as num?)?.toDouble() ?? 0.0,
       currentLongitude: (json['currentLongitude'] as num?)?.toDouble() ?? 0.0,
-      status: _parseStatus(json['status']),
       etaMinutes: json['etaMinutes']?.toString() ?? '--',
+      status: _parseStatus(json['status']),
       startTime: json['startTime'] != null ? DateTime.tryParse(json['startTime'].toString()) : null,
       endTime: json['endTime'] != null ? DateTime.tryParse(json['endTime'].toString()) : null,
     );
@@ -47,48 +50,51 @@ class RideModel {
 
   Map<String, dynamic> toJson() {
     return {
-      'driverUid': driverUid,
+      'vehicleId': vehicleId,
+      'driverId': driverId,
       'routeName': routeName,
       'studentIds': studentIds,
       'currentLatitude': currentLatitude,
       'currentLongitude': currentLongitude,
-      'status': status.name,
       'etaMinutes': etaMinutes,
+      'status': status.name,
       'startTime': startTime?.toIso8601String(),
       'endTime': endTime?.toIso8601String(),
     };
   }
 
-  static RideStatus _parseStatus(dynamic statusStr) {
-    if (statusStr == null) return RideStatus.scheduled;
+  static TripStatus _parseStatus(dynamic statusStr) {
+    if (statusStr == null) return TripStatus.scheduled;
     try {
-      return RideStatus.values.byName(statusStr.toString());
+      return TripStatus.values.byName(statusStr.toString());
     } catch (_) {
-      return RideStatus.scheduled;
+      return TripStatus.scheduled;
     }
   }
 
-  RideModel copyWith({
+  TripModel copyWith({
     String? id,
-    String? driverUid,
+    String? vehicleId,
+    String? driverId,
     String? routeName,
     List<String>? studentIds,
     double? currentLatitude,
     double? currentLongitude,
-    RideStatus? status,
     String? etaMinutes,
+    TripStatus? status,
     DateTime? startTime,
     DateTime? endTime,
   }) {
-    return RideModel(
+    return TripModel(
       id: id ?? this.id,
-      driverUid: driverUid ?? this.driverUid,
+      vehicleId: vehicleId ?? this.vehicleId,
+      driverId: driverId ?? this.driverId,
       routeName: routeName ?? this.routeName,
       studentIds: studentIds ?? this.studentIds,
       currentLatitude: currentLatitude ?? this.currentLatitude,
       currentLongitude: currentLongitude ?? this.currentLongitude,
-      status: status ?? this.status,
       etaMinutes: etaMinutes ?? this.etaMinutes,
+      status: status ?? this.status,
       startTime: startTime ?? this.startTime,
       endTime: endTime ?? this.endTime,
     );

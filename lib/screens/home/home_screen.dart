@@ -9,12 +9,13 @@ import '../../providers/location_provider.dart';
 import '../../providers/attendance_provider.dart';
 import '../../models/user_model.dart';
 import '../../models/student_model.dart';
-import '../../models/ride_model.dart';
+import '../../models/trip_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/utils/responsive_layout.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/custom_button.dart';
+import 'widgets/driver_dashboard.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -169,7 +170,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (user.role == UserRole.parent) ...[
                   _buildChildrenListSection(context),
                 ] else if (user.role == UserRole.driver) ...[
-                  _buildDriverControlSection(context),
+                  const DriverDashboard(),
                 ] else ...[
                   _buildAssistantControlSection(context),
                 ],
@@ -271,7 +272,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _buildDriverControlSection(context),
+        const DriverDashboard(),
         const SizedBox(height: 20),
         const Text(
           'Active Route GPS',
@@ -432,7 +433,7 @@ class _HomeScreenState extends State<HomeScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton.icon(
-                  onPressed: () => _showQrDialog(context, student),
+                  onPressed: () => Navigator.pushNamed(context, AppConstants.routeQrCard, arguments: student),
                   icon: const Icon(Icons.qr_code_2_rounded, size: 18),
                   label: const Text('Show QR', style: TextStyle(fontSize: 13)),
                   style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
@@ -441,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ElevatedButton.icon(
                   onPressed: student.status == StudentStatus.inTransit
                       ? () {
-                          locationProv.startTrackingRide('mock-ride-1');
+                          locationProv.startTrackingTrip('mock-ride-1');
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text('Connected to live school bus tracking stream.'),
@@ -469,74 +470,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- DRIVER CONTROLS ---
-  Widget _buildDriverControlSection(BuildContext context) {
-    final locationProv = Provider.of<LocationProvider>(context);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const Text(
-          'Route Console',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-        ),
-        const SizedBox(height: 10),
-        GlassCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Greenwood Route 4B',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-                      ),
-                      Text(
-                        locationProv.isSharingLocation ? 'Sharing GPS location live' : 'Offline • GPS inactive',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: locationProv.isSharingLocation ? AppTheme.success : AppTheme.textSecondary,
-                        ),
-                      )
-                    ],
-                  ),
-                  Icon(
-                    Icons.directions_bus,
-                    color: locationProv.isSharingLocation ? AppTheme.success : AppTheme.textMuted,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              CustomButton(
-                text: locationProv.isSharingLocation ? 'Stop Sharing GPS' : 'Start Sharing GPS Location',
-                isSecondary: locationProv.isSharingLocation,
-                onPressed: () {
-                  if (locationProv.isSharingLocation) {
-                    locationProv.stopSharing();
-                  } else {
-                    locationProv.startSharing('mock-ride-1');
-                  }
-                },
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: () => _openScanner(context),
-                icon: const Icon(Icons.qr_code_scanner_rounded),
-                label: const Text('Scan Student QR Code'),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 56),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
 
   // --- ASSISTANT CONTROLS ---
   Widget _buildAssistantControlSection(BuildContext context) {
@@ -613,61 +546,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- QR DIALOG ---
-  void _showQrDialog(BuildContext context, StudentModel student) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surfaceColor,
-          title: Text(
-            '${student.name}\'s Safety Badge',
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: QrImageView(
-                  data: student.qrCodeData,
-                  version: QrVersions.auto,
-                  size: 200.0,
-                  gapless: false,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                student.qrCodeData,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontFamily: 'monospace',
-                  color: AppTheme.textSecondary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                'Let the school bus driver or gate administrator scan this QR code for check-in/out updates.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Close', style: TextStyle(color: AppTheme.primaryLight)),
-            )
-          ],
-        );
-      },
-    );
-  }
 
   // --- SCANNER MODAL SHEET ---
   void _openScanner(BuildContext context) {
@@ -846,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildTrackingMap(BuildContext context) {
     return Consumer<LocationProvider>(
       builder: (context, locationProv, _) {
-        final ride = locationProv.currentRide;
+        final trip = locationProv.currentTrip;
         final isSharing = locationProv.isSharingLocation;
 
         return Container(
@@ -857,10 +735,10 @@ class _HomeScreenState extends State<HomeScreen> {
               schoolLng: AppConstants.defaultSchoolLongitude,
               homeLat: AppConstants.defaultHomeLatitude,
               homeLng: AppConstants.defaultHomeLongitude,
-              busLat: ride?.currentLatitude ?? (isSharing ? AppConstants.defaultSchoolLatitude : null),
-              busLng: ride?.currentLongitude ?? (isSharing ? AppConstants.defaultSchoolLongitude : null),
-              busEta: ride?.etaMinutes ?? '--',
-              rideStatus: ride?.status ?? (isSharing ? RideStatus.active : RideStatus.scheduled),
+              busLat: trip?.currentLatitude ?? (isSharing ? AppConstants.defaultSchoolLatitude : null),
+              busLng: trip?.currentLongitude ?? (isSharing ? AppConstants.defaultSchoolLongitude : null),
+              busEta: trip?.etaMinutes ?? '--',
+              tripStatus: trip?.status ?? (isSharing ? TripStatus.active : TripStatus.scheduled),
             ),
           ),
         );
@@ -878,7 +756,7 @@ class MapSchemaPainter extends CustomPainter {
   final double? busLat;
   final double? busLng;
   final String busEta;
-  final RideStatus rideStatus;
+  final TripStatus tripStatus;
 
   MapSchemaPainter({
     required this.schoolLat,
@@ -888,7 +766,7 @@ class MapSchemaPainter extends CustomPainter {
     required this.busLat,
     required this.busLng,
     required this.busEta,
-    required this.rideStatus,
+    required this.tripStatus,
   });
 
   @override

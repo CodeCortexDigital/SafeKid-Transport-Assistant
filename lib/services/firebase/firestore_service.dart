@@ -1,23 +1,56 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as fs;
 import '../../models/student_model.dart';
-import '../../models/ride_model.dart';
+import '../../models/trip_model.dart';
 import '../../models/user_model.dart';
+import '../../models/vehicle_model.dart';
+import '../../models/scan_log_model.dart';
+import '../../models/message_model.dart';
+import '../../models/feedback_model.dart';
+import '../../models/billing_model.dart';
 import '../../core/errors/failures.dart';
 import '../../core/constants/app_constants.dart';
 
 abstract class FirestoreService {
+  // Users
   Future<void> createUserProfile(UserModel user);
   Future<UserModel?> getUserProfile(String uid);
   
+  // Students
+  Future<void> createStudent(StudentModel student);
   Future<StudentModel> getStudent(String studentId);
   Stream<StudentModel> streamStudent(String studentId);
   Future<void> updateStudentStatus(String studentId, StudentStatus status);
-  
-  Future<RideModel> getRide(String rideId);
-  Stream<RideModel> streamRide(String rideId);
-  Future<void> updateRideLocation(String rideId, double latitude, double longitude);
   Future<List<StudentModel>> getStudentsForParent(String parentUid);
+  Future<void> updateStudent(StudentModel student);
+  Future<void> deleteStudent(String studentId);
+  Future<List<StudentModel>> getAllStudents();
+
+  // Vehicles
+  Future<VehicleModel> getVehicle(String vehicleId);
+  Future<void> updateVehicleLocation(String vehicleId, double latitude, double longitude);
+  Stream<VehicleModel> streamVehicle(String vehicleId);
+
+  // Trips
+  Future<TripModel> getTrip(String tripId);
+  Future<void> updateTripStatus(String tripId, TripStatus status);
+  Future<void> updateTripLocation(String tripId, double latitude, double longitude);
+  Stream<TripModel> streamTrip(String tripId);
+
+  // Scan Logs
+  Future<void> createScanLog(ScanLogModel log);
+  Future<List<ScanLogModel>> getScanLogsForStudent(String studentId);
+
+  // Messages
+  Future<void> sendMessage(MessageModel message);
+  Stream<List<MessageModel>> streamMessages(String senderId, String receiverId);
+
+  // Feedback
+  Future<void> submitFeedback(FeedbackModel feedback);
+
+  // Billing
+  Future<List<BillingModel>> getBillingRecords(String parentId);
+  Stream<List<BillingModel>> streamBillingRecords(String parentId);
 }
 
 /// Production implementation using Firebase Cloud Firestore
@@ -27,10 +60,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> createUserProfile(UserModel user) async {
     try {
-      await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(user.id)
-          .set(user.toJson());
+      await _firestore.collection(AppConstants.usersCollection).doc(user.id).set(user.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -39,14 +69,20 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<UserModel?> getUserProfile(String uid) async {
     try {
-      final doc = await _firestore
-          .collection(AppConstants.usersCollection)
-          .doc(uid)
-          .get();
+      final doc = await _firestore.collection(AppConstants.usersCollection).doc(uid).get();
       if (doc.exists && doc.data() != null) {
         return UserModel.fromJson(doc.data()!, doc.id);
       }
       return null;
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> createStudent(StudentModel student) async {
+    try {
+      await _firestore.collection(AppConstants.studentsCollection).doc(student.id).set(student.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -82,58 +118,10 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateStudentStatus(String studentId, StudentStatus status) async {
     try {
-      final data = {
+      await _firestore.collection(AppConstants.studentsCollection).doc(studentId).update({
         'status': status.name,
         if (status == StudentStatus.atSchool) 'lastCheckIn': DateTime.now().toIso8601String(),
         if (status == StudentStatus.home) 'lastCheckOut': DateTime.now().toIso8601String(),
-      };
-      
-      await _firestore.collection(AppConstants.studentsCollection).doc(studentId).update(data);
-      
-      // Log attendance event
-      await _firestore.collection(AppConstants.attendanceCollection).add({
-        'studentId': studentId,
-        'status': status.name,
-        'timestamp': DateTime.now().toIso8601String(),
-      });
-    } catch (e) {
-      throw ServerFailure(e.toString());
-    }
-  }
-
-  @override
-  Future<RideModel> getRide(String rideId) async {
-    try {
-      final doc = await _firestore.collection(AppConstants.ridesCollection).doc(rideId).get();
-      if (!doc.exists || doc.data() == null) {
-        throw const ServerFailure('Ride not found.');
-      }
-      return RideModel.fromJson(doc.data()!, doc.id);
-    } catch (e) {
-      throw ServerFailure(e.toString());
-    }
-  }
-
-  @override
-  Stream<RideModel> streamRide(String rideId) {
-    return _firestore
-        .collection(AppConstants.ridesCollection)
-        .doc(rideId)
-        .snapshots()
-        .map((doc) {
-          if (!doc.exists || doc.data() == null) {
-            throw const ServerFailure('Ride details not found.');
-          }
-          return RideModel.fromJson(doc.data()!, doc.id);
-        });
-  }
-
-  @override
-  Future<void> updateRideLocation(String rideId, double latitude, double longitude) async {
-    try {
-      await _firestore.collection(AppConstants.ridesCollection).doc(rideId).update({
-        'currentLatitude': latitude,
-        'currentLongitude': longitude,
       });
     } catch (e) {
       throw ServerFailure(e.toString());
@@ -147,27 +135,224 @@ class FirebaseFirestoreService implements FirestoreService {
           .collection(AppConstants.studentsCollection)
           .where('parentUid', isEqualTo: parentUid)
           .get();
-      
-      return snapshot.docs
-          .map((doc) => StudentModel.fromJson(doc.data(), doc.id))
-          .toList();
+      return snapshot.docs.map((doc) => StudentModel.fromJson(doc.data(), doc.id)).toList();
     } catch (e) {
       throw ServerFailure(e.toString());
     }
   }
+
+  @override
+  Future<void> updateStudent(StudentModel student) async {
+    try {
+      await _firestore.collection(AppConstants.studentsCollection).doc(student.id).update(student.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> deleteStudent(String studentId) async {
+    try {
+      await _firestore.collection(AppConstants.studentsCollection).doc(studentId).delete();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<List<StudentModel>> getAllStudents() async {
+    try {
+      final snapshot = await _firestore.collection(AppConstants.studentsCollection).get();
+      return snapshot.docs.map((doc) => StudentModel.fromJson(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<VehicleModel> getVehicle(String vehicleId) async {
+    try {
+      final doc = await _firestore.collection('vehicles').doc(vehicleId).get();
+      if (!doc.exists || doc.data() == null) {
+        throw const ServerFailure('Vehicle details not found.');
+      }
+      return VehicleModel.fromJson(doc.data()!, doc.id);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> updateVehicleLocation(String vehicleId, double latitude, double longitude) async {
+    try {
+      await _firestore.collection('vehicles').doc(vehicleId).update({
+        'currentLatitude': latitude,
+        'currentLongitude': longitude,
+        'lastUpdated': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Stream<VehicleModel> streamVehicle(String vehicleId) {
+    return _firestore.collection('vehicles').doc(vehicleId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) {
+        throw const ServerFailure('Vehicle data stream error.');
+      }
+      return VehicleModel.fromJson(doc.data()!, doc.id);
+    });
+  }
+
+  @override
+  Future<TripModel> getTrip(String tripId) async {
+    try {
+      final doc = await _firestore.collection('trips').doc(tripId).get();
+      if (!doc.exists || doc.data() == null) {
+        throw const ServerFailure('Trip route details not found.');
+      }
+      return TripModel.fromJson(doc.data()!, doc.id);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> updateTripStatus(String tripId, TripStatus status) async {
+    try {
+      await _firestore.collection('trips').doc(tripId).update({
+        'status': status.name,
+        if (status == TripStatus.active) 'startTime': DateTime.now().toIso8601String(),
+        if (status == TripStatus.completed) 'endTime': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> updateTripLocation(String tripId, double latitude, double longitude) async {
+    try {
+      await _firestore.collection('trips').doc(tripId).update({
+        'currentLatitude': latitude,
+        'currentLongitude': longitude,
+      });
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Stream<TripModel> streamTrip(String tripId) {
+    return _firestore.collection('trips').doc(tripId).snapshots().map((doc) {
+      if (!doc.exists || doc.data() == null) {
+        throw const ServerFailure('Trip tracking stream error.');
+      }
+      return TripModel.fromJson(doc.data()!, doc.id);
+    });
+  }
+
+  @override
+  Future<void> createScanLog(ScanLogModel log) async {
+    try {
+      await _firestore.collection('scan_logs').doc(log.id).set(log.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<List<ScanLogModel>> getScanLogsForStudent(String studentId) async {
+    try {
+      final snap = await _firestore
+          .collection('scan_logs')
+          .where('studentId', isEqualTo: studentId)
+          .orderBy('timestamp', descending: true)
+          .get();
+      return snap.docs.map((doc) => ScanLogModel.fromJson(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> sendMessage(MessageModel message) async {
+    try {
+      await _firestore.collection('messages').doc(message.id).set(message.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Stream<List<MessageModel>> streamMessages(String senderId, String receiverId) {
+    return _firestore
+        .collection('messages')
+        .where('senderId', whereIn: [senderId, receiverId])
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snap) {
+          return snap.docs
+              .map((doc) => MessageModel.fromJson(doc.data(), doc.id))
+              .where((m) =>
+                  (m.senderId == senderId && m.receiverId == receiverId) ||
+                  (m.senderId == receiverId && m.receiverId == senderId))
+              .toList();
+        });
+  }
+
+  @override
+  Future<void> submitFeedback(FeedbackModel feedback) async {
+    try {
+      await _firestore.collection('feedback').doc(feedback.id).set(feedback.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<List<BillingModel>> getBillingRecords(String parentId) async {
+    try {
+      final snap = await _firestore
+          .collection('billing')
+          .where('parentId', isEqualTo: parentId)
+          .get();
+      return snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Stream<List<BillingModel>> streamBillingRecords(String parentId) {
+    return _firestore
+        .collection('billing')
+        .where('parentId', isEqualTo: parentId)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList());
+  }
 }
 
-/// Demo/Local Mock implementation using standard in-memory states and simulation
+/// Demo/Local Mock implementation
 class MockFirestoreService implements FirestoreService {
   final Map<String, StudentModel> _students = {};
-  final Map<String, RideModel> _rides = {};
   final Map<String, UserModel> _users = {};
+  final Map<String, VehicleModel> _vehicles = {};
+  final Map<String, TripModel> _trips = {};
+  final Map<String, ScanLogModel> _scanLogs = {};
+  final Map<String, MessageModel> _messages = {};
+  final Map<String, FeedbackModel> _feedback = {};
+  final Map<String, BillingModel> _billing = {};
   
   final Map<String, StreamController<StudentModel>> _studentStreamControllers = {};
-  final Map<String, StreamController<RideModel>> _rideStreamControllers = {};
+  final Map<String, StreamController<VehicleModel>> _vehicleStreamControllers = {};
+  final Map<String, StreamController<TripModel>> _tripStreamControllers = {};
+  final Map<String, StreamController<List<MessageModel>>> _messageStreamControllers = {};
+  final Map<String, StreamController<List<BillingModel>>> _billingStreamControllers = {};
 
   MockFirestoreService() {
-    // Populate mock users
+    // Users
     _users['mock-parent-uid-123'] = UserModel(
       id: 'mock-parent-uid-123',
       name: 'John Doe',
@@ -182,15 +367,8 @@ class MockFirestoreService implements FirestoreService {
       role: UserRole.driver,
       createdAt: DateTime.now(),
     );
-    _users['mock-assistant-uid-789'] = UserModel(
-      id: 'mock-assistant-uid-789',
-      name: 'Sarah Connor',
-      phone: '+15553333333',
-      role: UserRole.assistant,
-      createdAt: DateTime.now(),
-    );
 
-    // Populate mock students
+    // Students
     _students['mock-student-1'] = StudentModel(
       id: 'mock-student-1',
       name: 'Emma Doe',
@@ -200,8 +378,11 @@ class MockFirestoreService implements FirestoreService {
       parentUid: 'mock-parent-uid-123',
       qrCodeData: 'STUDENT_EMMA_DOE_123',
       status: StudentStatus.home,
+      parentName: 'John Doe',
+      parentPhone: '+15551111111',
+      pickupPoint: '74th St & Madison Ave',
+      dropPoint: '82nd St & Lex Ave',
     );
-
     _students['mock-student-2'] = StudentModel(
       id: 'mock-student-2',
       name: 'Liam Doe',
@@ -211,18 +392,66 @@ class MockFirestoreService implements FirestoreService {
       parentUid: 'mock-parent-uid-123',
       qrCodeData: 'STUDENT_LIAM_DOE_456',
       status: StudentStatus.atSchool,
+      parentName: 'John Doe',
+      parentPhone: '+15551111111',
+      pickupPoint: '74th St & Madison Ave',
+      dropPoint: '82nd St & Lex Ave',
     );
 
-    // Populate mock rides
-    _rides['mock-ride-1'] = RideModel(
+    // Vehicles
+    _vehicles['mock-vehicle-1'] = VehicleModel(
+      id: 'mock-vehicle-1',
+      vehicleNumber: 'GK-882',
+      model: 'Ford Transit Bus',
+      capacity: 24,
+      driverId: 'mock-driver-uid-456',
+      status: 'active',
+      currentLatitude: AppConstants.defaultSchoolLatitude,
+      currentLongitude: AppConstants.defaultSchoolLongitude,
+      lastUpdated: DateTime.now(),
+    );
+
+    // Trips
+    _trips['mock-ride-1'] = TripModel(
       id: 'mock-ride-1',
-      driverUid: 'mock-driver-uid-456',
+      vehicleId: 'mock-vehicle-1',
+      driverId: 'mock-driver-uid-456',
       routeName: 'Greenwood Route 4B',
       studentIds: ['mock-student-1', 'mock-student-2'],
       currentLatitude: AppConstants.defaultSchoolLatitude,
       currentLongitude: AppConstants.defaultSchoolLongitude,
-      status: RideStatus.scheduled,
       etaMinutes: '--',
+      status: TripStatus.scheduled,
+    );
+
+    // Billing
+    _billing['mock-bill-1'] = BillingModel(
+      id: 'mock-bill-1',
+      parentId: 'mock-parent-uid-123',
+      amount: 150.00,
+      status: 'paid',
+      billingDate: DateTime.now().subtract(const Duration(days: 30)),
+      dueDate: DateTime.now().subtract(const Duration(days: 15)),
+      paymentMethod: 'Card',
+    );
+    _billing['mock-bill-2'] = BillingModel(
+      id: 'mock-bill-2',
+      parentId: 'mock-parent-uid-123',
+      amount: 150.00,
+      status: 'pending',
+      billingDate: DateTime.now(),
+      dueDate: DateTime.now().add(const Duration(days: 15)),
+    );
+
+    // Messages (Initial Chat)
+    _messages['mock-msg-1'] = MessageModel(
+      id: 'mock-msg-1',
+      senderId: 'mock-driver-uid-456',
+      receiverId: 'mock-parent-uid-123',
+      messageText: 'Hello! I am Robert, Greenwood route driver. Bus is ready.',
+      timestamp: DateTime.now().subtract(const Duration(hours: 1)),
+      isRead: true,
+      tripId: 'mock-ride-1',
     );
   }
 
@@ -239,10 +468,17 @@ class MockFirestoreService implements FirestoreService {
   }
 
   @override
+  Future<void> createStudent(StudentModel student) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _students[student.id] = student;
+    _studentStreamControllers[student.id]?.add(student);
+  }
+
+  @override
   Future<StudentModel> getStudent(String studentId) async {
     await Future.delayed(const Duration(milliseconds: 300));
     if (!_students.containsKey(studentId)) {
-      throw const ServerFailure('Mock student not found.');
+      throw const ServerFailure('Student not found.');
     }
     return _students[studentId]!;
   }
@@ -261,10 +497,8 @@ class MockFirestoreService implements FirestoreService {
 
   @override
   Future<void> updateStudentStatus(String studentId, StudentStatus status) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    if (!_students.containsKey(studentId)) {
-      throw const ServerFailure('Mock student not found.');
-    }
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!_students.containsKey(studentId)) return;
     
     final updated = _students[studentId]!.copyWith(
       status: status,
@@ -276,37 +510,125 @@ class MockFirestoreService implements FirestoreService {
   }
 
   @override
-  Future<RideModel> getRide(String rideId) async {
+  Future<List<StudentModel>> getStudentsForParent(String parentUid) async {
     await Future.delayed(const Duration(milliseconds: 300));
-    if (!_rides.containsKey(rideId)) {
-      throw const ServerFailure('Mock ride not found.');
-    }
-    return _rides[rideId]!;
+    return _students.values.where((student) => student.parentUid == parentUid).toList();
   }
 
   @override
-  Stream<RideModel> streamRide(String rideId) {
-    final controller = _rideStreamControllers.putIfAbsent(
-      rideId, 
-      () => StreamController<RideModel>.broadcast()
-    );
-    if (_rides.containsKey(rideId)) {
-      controller.add(_rides[rideId]!);
+  Future<void> updateStudent(StudentModel student) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    _students[student.id] = student;
+    _studentStreamControllers[student.id]?.add(student);
+  }
+
+  @override
+  Future<void> deleteStudent(String studentId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    _students.remove(studentId);
+    _studentStreamControllers.remove(studentId);
+  }
+
+  @override
+  Future<List<StudentModel>> getAllStudents() async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return _students.values.toList();
+  }
+
+  @override
+  Future<VehicleModel> getVehicle(String vehicleId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!_vehicles.containsKey(vehicleId)) {
+      throw const ServerFailure('Vehicle details not found.');
     }
-    _simulateRideMovement(rideId);
+    return _vehicles[vehicleId]!;
+  }
+
+  @override
+  Future<void> updateVehicleLocation(String vehicleId, double latitude, double longitude) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!_vehicles.containsKey(vehicleId)) return;
+
+    final updated = _vehicles[vehicleId]!.copyWith(
+      currentLatitude: latitude,
+      currentLongitude: longitude,
+      lastUpdated: DateTime.now(),
+    );
+    _vehicles[vehicleId] = updated;
+    _vehicleStreamControllers[vehicleId]?.add(updated);
+  }
+
+  @override
+  Stream<VehicleModel> streamVehicle(String vehicleId) {
+    final controller = _vehicleStreamControllers.putIfAbsent(
+      vehicleId, 
+      () => StreamController<VehicleModel>.broadcast()
+    );
+    if (_vehicles.containsKey(vehicleId)) {
+      controller.add(_vehicles[vehicleId]!);
+    }
     return controller.stream;
   }
 
-  void _simulateRideMovement(String rideId) {
+  @override
+  Future<TripModel> getTrip(String tripId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!_trips.containsKey(tripId)) {
+      throw const ServerFailure('Trip not found.');
+    }
+    return _trips[tripId]!;
+  }
+
+  @override
+  Future<void> updateTripStatus(String tripId, TripStatus status) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!_trips.containsKey(tripId)) return;
+
+    final updated = _trips[tripId]!.copyWith(
+      status: status,
+      startTime: status == TripStatus.active ? DateTime.now() : _trips[tripId]!.startTime,
+      endTime: status == TripStatus.completed ? DateTime.now() : _trips[tripId]!.endTime,
+    );
+    _trips[tripId] = updated;
+    _tripStreamControllers[tripId]?.add(updated);
+  }
+
+  @override
+  Future<void> updateTripLocation(String tripId, double latitude, double longitude) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!_trips.containsKey(tripId)) return;
+
+    final updated = _trips[tripId]!.copyWith(
+      currentLatitude: latitude,
+      currentLongitude: longitude,
+    );
+    _trips[tripId] = updated;
+    _tripStreamControllers[tripId]?.add(updated);
+  }
+
+  @override
+  Stream<TripModel> streamTrip(String tripId) {
+    final controller = _tripStreamControllers.putIfAbsent(
+      tripId, 
+      () => StreamController<TripModel>.broadcast()
+    );
+    if (_trips.containsKey(tripId)) {
+      controller.add(_trips[tripId]!);
+    }
+    _simulateTripMovement(tripId);
+    return controller.stream;
+  }
+
+  void _simulateTripMovement(String tripId) {
     int tick = 0;
     Timer.periodic(const Duration(seconds: 4), (timer) {
-      if (!_rides.containsKey(rideId)) {
+      if (!_trips.containsKey(tripId)) {
         timer.cancel();
         return;
       }
       
-      final currentRide = _rides[rideId]!;
-      if (currentRide.status == RideStatus.completed || currentRide.status == RideStatus.cancelled) {
+      final currentTrip = _trips[tripId]!;
+      if (currentTrip.status == TripStatus.completed || currentTrip.status == TripStatus.cancelled) {
         timer.cancel();
         return;
       }
@@ -320,25 +642,28 @@ class MockFirestoreService implements FirestoreService {
       int minutesRemaining = (15 - tick * 1.5).round();
       if (minutesRemaining < 1) minutesRemaining = 1;
       
-      RideStatus nextStatus = currentRide.status;
+      TripStatus nextStatus = currentTrip.status;
       if (tick == 0) {
-        nextStatus = RideStatus.active;
+        nextStatus = TripStatus.active;
       } else if (tick >= 10) {
-        nextStatus = RideStatus.completed;
+        nextStatus = TripStatus.completed;
       }
 
-      final updated = currentRide.copyWith(
+      final updated = currentTrip.copyWith(
         status: nextStatus,
         currentLatitude: lat,
         currentLongitude: lng,
-        etaMinutes: nextStatus == RideStatus.completed ? '0' : '$minutesRemaining',
+        etaMinutes: nextStatus == TripStatus.completed ? '0' : '$minutesRemaining',
       );
       
-      _rides[rideId] = updated;
-      _rideStreamControllers[rideId]?.add(updated);
+      _trips[tripId] = updated;
+      _tripStreamControllers[tripId]?.add(updated);
       
-      if (nextStatus == RideStatus.completed) {
-        for (var sid in currentRide.studentIds) {
+      // Update vehicle coordinates too
+      updateVehicleLocation('mock-vehicle-1', lat, lng);
+      
+      if (nextStatus == TripStatus.completed) {
+        for (var sid in currentTrip.studentIds) {
           updateStudentStatus(sid, StudentStatus.home);
         }
         timer.cancel();
@@ -348,21 +673,79 @@ class MockFirestoreService implements FirestoreService {
   }
 
   @override
-  Future<void> updateRideLocation(String rideId, double latitude, double longitude) async {
-    if (!_rides.containsKey(rideId)) {
-      throw const ServerFailure('Mock ride not found.');
-    }
-    final updated = _rides[rideId]!.copyWith(
-      currentLatitude: latitude,
-      currentLongitude: longitude,
-    );
-    _rides[rideId] = updated;
-    _rideStreamControllers[rideId]?.add(updated);
+  Future<void> createScanLog(ScanLogModel log) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _scanLogs[log.id] = log;
   }
 
   @override
-  Future<List<StudentModel>> getStudentsForParent(String parentUid) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return _students.values.where((student) => student.parentUid == parentUid).toList();
+  Future<List<ScanLogModel>> getScanLogsForStudent(String studentId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return _scanLogs.values.where((log) => log.studentId == studentId).toList();
+  }
+
+  @override
+  Future<void> sendMessage(MessageModel message) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    _messages[message.id] = message;
+    
+    // Trigger update on listeners
+    _notifyMessagesUpdate(message.senderId, message.receiverId);
+  }
+
+  void _notifyMessagesUpdate(String senderId, String receiverId) {
+    final queryKey = _getMessageKey(senderId, receiverId);
+    if (_messageStreamControllers.containsKey(queryKey)) {
+      final list = _messages.values
+          .where((m) =>
+              (m.senderId == senderId && m.receiverId == receiverId) ||
+              (m.senderId == receiverId && m.receiverId == senderId))
+          .toList();
+      _messageStreamControllers[queryKey]!.add(list);
+    }
+  }
+
+  String _getMessageKey(String id1, String id2) {
+    final list = [id1, id2]..sort();
+    return list.join('_');
+  }
+
+  @override
+  Stream<List<MessageModel>> streamMessages(String senderId, String receiverId) {
+    final queryKey = _getMessageKey(senderId, receiverId);
+    final controller = _messageStreamControllers.putIfAbsent(
+      queryKey, 
+      () => StreamController<List<MessageModel>>.broadcast()
+    );
+    final initialList = _messages.values
+        .where((m) =>
+            (m.senderId == senderId && m.receiverId == receiverId) ||
+            (m.senderId == receiverId && m.receiverId == senderId))
+        .toList();
+    controller.add(initialList);
+    return controller.stream;
+  }
+
+  @override
+  Future<void> submitFeedback(FeedbackModel feed) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _feedback[feed.id] = feed;
+  }
+
+  @override
+  Future<List<BillingModel>> getBillingRecords(String parentId) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return _billing.values.where((bill) => bill.parentId == parentId).toList();
+  }
+
+  @override
+  Stream<List<BillingModel>> streamBillingRecords(String parentId) {
+    final controller = _billingStreamControllers.putIfAbsent(
+      parentId, 
+      () => StreamController<List<BillingModel>>.broadcast()
+    );
+    final initialList = _billing.values.where((bill) => bill.parentId == parentId).toList();
+    controller.add(initialList);
+    return controller.stream;
   }
 }

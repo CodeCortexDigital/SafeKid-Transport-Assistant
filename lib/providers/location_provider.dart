@@ -1,30 +1,30 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../repositories/location_repository.dart';
-import '../models/ride_model.dart';
+import '../repositories/trip_repository.dart';
+import '../models/trip_model.dart';
 
 class LocationProvider extends ChangeNotifier {
-  final LocationRepository _locationRepository;
+  final TripRepository _tripRepository;
   
-  StreamSubscription<RideModel>? _rideSubscription;
-  RideModel? _currentRide;
+  StreamSubscription<TripModel>? _tripSubscription;
+  TripModel? _currentTrip;
   bool _isSharingLocation = false;
   String? _errorMessage;
 
-  RideModel? get currentRide => _currentRide;
+  TripModel? get currentTrip => _currentTrip;
   bool get isSharingLocation => _isSharingLocation;
   String? get errorMessage => _errorMessage;
 
-  LocationProvider(this._locationRepository);
+  LocationProvider(this._tripRepository);
 
-  /// Listens to live Firestore/Mock updates for an active trip/ride
-  void startTrackingRide(String rideId) {
-    _rideSubscription?.cancel();
+  /// Listens to live Firestore/Mock updates for an active trip route
+  void startTrackingTrip(String tripId) {
+    _tripSubscription?.cancel();
     _errorMessage = null;
 
-    _rideSubscription = _locationRepository.watchRide(rideId).listen(
-      (ride) {
-        _currentRide = ride;
+    _tripSubscription = _tripRepository.watchTrip(tripId).listen(
+      (trip) {
+        _currentTrip = trip;
         notifyListeners();
       },
       onError: (err) {
@@ -34,22 +34,22 @@ class LocationProvider extends ChangeNotifier {
     );
   }
 
-  /// Stops tracking active ride status updates
-  void stopTrackingRide() {
-    _rideSubscription?.cancel();
-    _rideSubscription = null;
-    _currentRide = null;
+  /// Stops tracking active trip status updates
+  void stopTrackingTrip() {
+    _tripSubscription?.cancel();
+    _tripSubscription = null;
+    _currentTrip = null;
     notifyListeners();
   }
 
   /// Enables driver's own location sharing via GPS (updates Firestore)
-  Future<void> startSharing(String rideId) async {
+  Future<void> startSharing(String tripId) async {
     _isSharingLocation = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      await _locationRepository.startSharingLocation(rideId);
+      await _tripRepository.startSharingLocation(tripId);
     } catch (e) {
       _errorMessage = e.toString();
       _isSharingLocation = false;
@@ -59,15 +59,15 @@ class LocationProvider extends ChangeNotifier {
 
   /// Disables location sharing
   Future<void> stopSharing() async {
-    await _locationRepository.stopSharingLocation();
+    await _tripRepository.stopSharingLocation();
     _isSharingLocation = false;
     notifyListeners();
   }
 
   @override
   void dispose() {
-    _rideSubscription?.cancel();
-    _locationRepository.stopSharingLocation();
+    _tripSubscription?.cancel();
+    _tripRepository.stopSharingLocation();
     super.dispose();
   }
 }

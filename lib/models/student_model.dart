@@ -16,6 +16,10 @@ class StudentModel {
   final StudentStatus status;
   final DateTime? lastCheckIn;
   final DateTime? lastCheckOut;
+  final String parentName;
+  final String parentPhone;
+  final String pickupPoint;
+  final String dropPoint;
 
   StudentModel({
     required this.id,
@@ -28,6 +32,10 @@ class StudentModel {
     this.status = StudentStatus.home,
     this.lastCheckIn,
     this.lastCheckOut,
+    this.parentName = '',
+    this.parentPhone = '',
+    this.pickupPoint = '',
+    this.dropPoint = '',
   });
 
   factory StudentModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -42,6 +50,10 @@ class StudentModel {
       status: _parseStatus(json['status']),
       lastCheckIn: json['lastCheckIn'] != null ? DateTime.tryParse(json['lastCheckIn'].toString()) : null,
       lastCheckOut: json['lastCheckOut'] != null ? DateTime.tryParse(json['lastCheckOut'].toString()) : null,
+      parentName: json['parentName'] ?? '',
+      parentPhone: json['parentPhone'] ?? '',
+      pickupPoint: json['pickupPoint'] ?? '',
+      dropPoint: json['dropPoint'] ?? '',
     );
   }
 
@@ -56,6 +68,10 @@ class StudentModel {
       'status': status.name,
       'lastCheckIn': lastCheckIn?.toIso8601String(),
       'lastCheckOut': lastCheckOut?.toIso8601String(),
+      'parentName': parentName,
+      'parentPhone': parentPhone,
+      'pickupPoint': pickupPoint,
+      'dropPoint': dropPoint,
     };
   }
 
@@ -79,6 +95,10 @@ class StudentModel {
     StudentStatus? status,
     DateTime? lastCheckIn,
     DateTime? lastCheckOut,
+    String? parentName,
+    String? parentPhone,
+    String? pickupPoint,
+    String? dropPoint,
   }) {
     return StudentModel(
       id: id ?? this.id,
@@ -91,6 +111,10 @@ class StudentModel {
       status: status ?? this.status,
       lastCheckIn: lastCheckIn ?? this.lastCheckIn,
       lastCheckOut: lastCheckOut ?? this.lastCheckOut,
+      parentName: parentName ?? this.parentName,
+      parentPhone: parentPhone ?? this.parentPhone,
+      pickupPoint: pickupPoint ?? this.pickupPoint,
+      dropPoint: dropPoint ?? this.dropPoint,
     );
   }
 }

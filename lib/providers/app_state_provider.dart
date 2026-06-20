@@ -7,7 +7,12 @@ import '../services/firebase/messaging_service.dart';
 import '../services/device/location_service.dart';
 import '../repositories/auth_repository.dart';
 import '../repositories/student_repository.dart';
-import '../repositories/location_repository.dart';
+import '../repositories/vehicle_repository.dart';
+import '../repositories/trip_repository.dart';
+import '../repositories/scan_log_repository.dart';
+import '../repositories/message_repository.dart';
+import '../repositories/feedback_repository.dart';
+import '../repositories/billing_repository.dart';
 
 class AppStateProvider extends ChangeNotifier {
   bool _isFirebaseInitialized = false;
@@ -24,7 +29,12 @@ class AppStateProvider extends ChangeNotifier {
 
   late AuthRepository authRepository;
   late StudentRepository studentRepository;
-  late LocationRepository locationRepository;
+  late VehicleRepository vehicleRepository;
+  late TripRepository tripRepository;
+  late ScanLogRepository scanLogRepository;
+  late MessageRepository messageRepository;
+  late FeedbackRepository feedbackRepository;
+  late BillingRepository billingRepository;
 
   AppStateProvider() {
     initializeApp();
@@ -74,7 +84,12 @@ class AppStateProvider extends ChangeNotifier {
     // Initialize Repositories using the resolved services
     authRepository = AuthRepository(authService, firestoreService);
     studentRepository = StudentRepository(firestoreService);
-    locationRepository = LocationRepository(locationService, firestoreService);
+    vehicleRepository = VehicleRepository(firestoreService);
+    tripRepository = TripRepository(locationService, firestoreService);
+    scanLogRepository = ScanLogRepository(firestoreService);
+    messageRepository = MessageRepository(firestoreService);
+    feedbackRepository = FeedbackRepository(firestoreService);
+    billingRepository = BillingRepository(firestoreService);
 
     // Initialize Messaging
     await messagingService.initialize();

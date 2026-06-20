@@ -6,6 +6,10 @@ class StudentRepository {
 
   StudentRepository(this._firestoreService);
 
+  Future<void> createStudent(StudentModel student) async {
+    await _firestoreService.createStudent(student);
+  }
+
   Future<StudentModel> getStudentDetails(String studentId) async {
     return await _firestoreService.getStudent(studentId);
   }
@@ -20,5 +24,17 @@ class StudentRepository {
 
   Future<List<StudentModel>> fetchParentStudents(String parentUid) async {
     return await _firestoreService.getStudentsForParent(parentUid);
+  }
+
+  Future<void> updateStudent(StudentModel student) async {
+    await _firestoreService.updateStudent(student);
+  }
+
+  Future<void> deleteStudent(String studentId) async {
+    await _firestoreService.deleteStudent(studentId);
+  }
+
+  Future<List<StudentModel>> getAllStudents() async {
+    return await _firestoreService.getAllStudents();
   }
 }
