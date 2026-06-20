@@ -181,6 +181,287 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
   }
 
+  Widget _buildScannerStudentTile(BuildContext context, StudentModel student) {
+    Color statusColor = AppTheme.success;
+    String statusLabel = 'At Home';
+    IconData statusIcon = Icons.home_rounded;
+
+    switch (student.status) {
+      case StudentStatus.home:
+        statusColor = AppTheme.success;
+        statusLabel = 'At Home';
+        statusIcon = Icons.home_rounded;
+        break;
+      case StudentStatus.inTransit:
+        statusColor = AppTheme.warning;
+        statusLabel = 'In Transit';
+        statusIcon = Icons.directions_bus_rounded;
+        break;
+      case StudentStatus.atSchool:
+        statusColor = AppTheme.primaryLight;
+        statusLabel = 'At School';
+        statusIcon = Icons.school_rounded;
+        break;
+      case StudentStatus.absent:
+        statusColor = AppTheme.error;
+        statusLabel = 'Absent';
+        statusIcon = Icons.cancel_rounded;
+        break;
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
+      ),
+      child: ListTile(
+        onTap: () => _showScannerStudentDetailsDialog(context, student),
+        leading: CircleAvatar(
+          backgroundColor: statusColor.withOpacity(0.12),
+          radius: 18,
+          child: Icon(statusIcon, color: statusColor, size: 16),
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                student.name,
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+              ),
+            ),
+            if (student.hasCustomTimings) ...[
+              const Icon(Icons.alarm_rounded, size: 14, color: AppTheme.accentLight),
+              const SizedBox(width: 4),
+            ],
+          ],
+        ),
+        subtitle: Text(
+          '${student.schoolName} • Class ${student.className}',
+          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+        ),
+        trailing: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: statusColor.withOpacity(0.15),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Text(
+            statusLabel,
+            style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showScannerStudentDetailsDialog(BuildContext context, StudentModel student) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String statusLabel = 'At Home';
+        Color statusColor = AppTheme.success;
+        IconData statusIcon = Icons.home_rounded;
+
+        switch (student.status) {
+          case StudentStatus.home:
+            statusLabel = 'At Home';
+            statusColor = AppTheme.success;
+            statusIcon = Icons.home_rounded;
+            break;
+          case StudentStatus.inTransit:
+            statusLabel = 'In Transit';
+            statusColor = AppTheme.warning;
+            statusIcon = Icons.directions_bus_rounded;
+            break;
+          case StudentStatus.atSchool:
+            statusLabel = 'At School';
+            statusColor = AppTheme.primaryLight;
+            statusIcon = Icons.school_rounded;
+            break;
+          case StudentStatus.absent:
+            statusLabel = 'Absent';
+            statusColor = AppTheme.error;
+            statusIcon = Icons.cancel_rounded;
+            break;
+        }
+
+        // Determine manual action button label based on currently selected event type
+        String manualBtnLabel = '';
+        switch (_selectedEventType) {
+          case ScanEventType.pickup:
+            manualBtnLabel = 'Manually Board Bus (Pickup)';
+            break;
+          case ScanEventType.schoolArrival:
+            manualBtnLabel = 'Manually Drop at School';
+            break;
+          case ScanEventType.schoolDeparture:
+            manualBtnLabel = 'Manually Board for Return';
+            break;
+          case ScanEventType.homeDrop:
+            manualBtnLabel = 'Manually Drop at Home';
+            break;
+        }
+
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          title: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: AppTheme.primaryColor.withOpacity(0.12),
+                child: const Icon(Icons.face_rounded, color: AppTheme.primaryLight),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      student.name,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                    Text(
+                      '${student.schoolName} • Class ${student.className} (${student.section})',
+                      style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Status Section
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: statusColor.withOpacity(0.2), width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(statusIcon, color: statusColor, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Current Status: $statusLabel',
+                          style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Custom Timings Row
+                if (student.hasCustomTimings) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.accentColor.withOpacity(0.2), width: 1),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.alarm_rounded, color: AppTheme.accentLight, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '⏰ Tomorrow\'s Custom Timings',
+                                style: TextStyle(color: AppTheme.accentLight, fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Pickup: ${student.customPickupTime ?? "N/A"} • Drop: ${student.customDropTime ?? "N/A"}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
+                // Parent Details
+                const Text(
+                  'Parent Contact Details',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                _buildModalDetailRow(Icons.person_rounded, 'Name', student.parentName),
+                _buildModalDetailRow(Icons.phone_iphone_rounded, 'Phone', student.parentPhone),
+                const SizedBox(height: 16),
+
+                // Stop Details
+                const Text(
+                  'Stops',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                _buildModalDetailRow(Icons.location_on_rounded, 'Pickup', student.pickupPoint.isNotEmpty ? student.pickupPoint : 'Not set'),
+                _buildModalDetailRow(Icons.location_searching_rounded, 'Drop', student.dropPoint.isNotEmpty ? student.dropPoint : 'Not set'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context);
+                await _processQrCode('${student.id}|${student.name}');
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              ),
+              child: Text(manualBtnLabel, style: const TextStyle(color: Colors.white, fontSize: 12)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildModalDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: AppTheme.textMuted),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final attendance = Provider.of<AttendanceProvider>(context);
@@ -212,7 +493,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               const SizedBox(height: 20),
 
               // Camera Frame or Simulation Card
-              Expanded(
+              SizedBox(
+                height: 230,
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(24),
                   child: Container(
@@ -224,6 +506,28 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 ),
               ),
               const SizedBox(height: 20),
+
+              // Route Students Header
+              const Text(
+                'Route Students (Tap name for details & manual log)',
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 8),
+
+              // Route Students List
+              Expanded(
+                child: students.isEmpty
+                    ? const Center(child: Text('No students registered on route', style: TextStyle(color: AppTheme.textSecondary)))
+                    : ListView.separated(
+                        itemCount: students.length,
+                        separatorBuilder: (_, __) => const SizedBox(height: 8),
+                        itemBuilder: (context, index) {
+                          final student = students[index];
+                          return _buildScannerStudentTile(context, student);
+                        },
+                      ),
+              ),
+              const SizedBox(height: 12),
 
               // Bottom Scan Summary
               _buildScanSummaryCard(),

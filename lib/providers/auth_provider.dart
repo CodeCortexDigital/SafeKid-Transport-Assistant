@@ -13,6 +13,7 @@ class AuthProvider extends ChangeNotifier {
   String? _verificationId;
   String? _phoneNumber;
   bool _needsRegistration = false;
+  bool _isManualLoginInProgress = false;
 
   UserModel? get user => _user;
   bool get isAuthenticated => _user != null;
@@ -26,6 +27,7 @@ class AuthProvider extends ChangeNotifier {
   AuthProvider(this._authRepository) {
     // Listen to changes in authentication state
     _authRepository.authStateChanges.listen((UserModel? fbUser) async {
+      if (_isManualLoginInProgress) return;
       if (fbUser == null) {
         _user = null;
         _needsRegistration = false;
@@ -98,6 +100,7 @@ class AuthProvider extends ChangeNotifier {
     }
 
     _isLoading = true;
+    _isManualLoginInProgress = true;
     _errorMessage = null;
     notifyListeners();
 
@@ -129,12 +132,15 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    } finally {
+      _isManualLoginInProgress = false;
     }
   }
 
   /// Signs in with Google account
   Future<bool> signInWithGoogle() async {
     _isLoading = true;
+    _isManualLoginInProgress = true;
     _errorMessage = null;
     notifyListeners();
 
@@ -166,6 +172,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    } finally {
+      _isManualLoginInProgress = false;
     }
   }
 

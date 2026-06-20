@@ -146,14 +146,44 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     );
   }
 
-  Widget _buildStudentCard(BuildContext context, StudentModel student) {
-    return GlassCard(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Row 1: Header (Name & Status Badge & Actions)
-          Row(
+  void _showStudentDetailsDialog(BuildContext context, StudentModel student) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        String statusLabel = 'At Home';
+        Color statusColor = AppTheme.success;
+        IconData statusIcon = Icons.home_rounded;
+
+        switch (student.status) {
+          case StudentStatus.home:
+            statusLabel = 'At Home';
+            statusColor = AppTheme.success;
+            statusIcon = Icons.home_rounded;
+            break;
+          case StudentStatus.inTransit:
+            statusLabel = 'In Transit';
+            statusColor = AppTheme.warning;
+            statusIcon = Icons.directions_bus_rounded;
+            break;
+          case StudentStatus.atSchool:
+            statusLabel = 'At School';
+            statusColor = AppTheme.primaryLight;
+            statusIcon = Icons.school_rounded;
+            break;
+          case StudentStatus.absent:
+            statusLabel = 'Absent';
+            statusColor = AppTheme.error;
+            statusIcon = Icons.cancel_rounded;
+            break;
+        }
+
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          title: Row(
             children: [
               CircleAvatar(
                 backgroundColor: AppTheme.primaryColor.withOpacity(0.12),
@@ -166,92 +196,252 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                   children: [
                     Text(
                       student.name,
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                     Text(
-                      '${student.schoolName} • ${student.className} - ${student.section}',
+                      '${student.schoolName} • Class ${student.className} (${student.section})',
                       style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                     ),
                   ],
                 ),
               ),
-              PopupMenuButton<String>(
-                onSelected: (val) {
-                  if (val == 'edit') {
-                    _showStudentForm(context, student);
-                  } else if (val == 'delete') {
-                    _showDeleteConfirm(context, student);
-                  } else if (val == 'qr') {
-                    Navigator.pushNamed(context, '/qr-card', arguments: student);
-                  }
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(
-                    value: 'qr',
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Status Section
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: statusColor.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: statusColor.withOpacity(0.2), width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(statusIcon, color: statusColor, size: 20),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Current Status: $statusLabel',
+                          style: TextStyle(color: statusColor, fontSize: 13, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Timings Row
+                if (student.hasCustomTimings) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentColor.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.accentColor.withOpacity(0.2), width: 1),
+                    ),
                     child: Row(
                       children: [
-                        Icon(Icons.qr_code_rounded, size: 18, color: AppTheme.accentLight),
-                        SizedBox(width: 8),
-                        Text('View Pass QR'),
+                        const Icon(Icons.alarm_rounded, color: AppTheme.accentLight, size: 20),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '⏰ Tomorrow\'s Custom Timings',
+                                style: TextStyle(color: AppTheme.accentLight, fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Pickup: ${student.customPickupTime ?? "N/A"} • Drop: ${student.customDropTime ?? "N/A"}',
+                                style: const TextStyle(color: Colors.white70, fontSize: 12),
+                              ),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   ),
-                  const PopupMenuItem(
-                    value: 'edit',
-                    child: Row(
-                      children: [
-                        Icon(Icons.edit_rounded, size: 18, color: AppTheme.primaryLight),
-                        SizedBox(width: 8),
-                        Text('Edit Details'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'delete',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_forever_rounded, size: 18, color: AppTheme.error),
-                        SizedBox(width: 8),
-                        Text('Remove Student', style: TextStyle(color: AppTheme.error)),
-                      ],
-                    ),
-                  ),
+                  const SizedBox(height: 16),
                 ],
-              ),
-            ],
-          ),
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: Colors.white10, height: 1),
-          ),
-          // Row 2: Details Grid
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDetailRow(Icons.person_outline_rounded, 'Parent', student.parentName),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(Icons.phone_iphone_rounded, 'Phone', student.parentPhone),
-                  ],
+
+                // Parent Details
+                const Text(
+                  'Parent Contact Details',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
                 ),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _buildDetailRow(Icons.location_on_outlined, 'Pickup', student.pickupPoint.isNotEmpty ? student.pickupPoint : 'Not set'),
-                    const SizedBox(height: 8),
-                    _buildDetailRow(Icons.location_searching_rounded, 'Drop', student.dropPoint.isNotEmpty ? student.dropPoint : 'Not set'),
-                  ],
+                const SizedBox(height: 8),
+                _buildModalDetailRow(Icons.person_rounded, 'Name', student.parentName),
+                _buildModalDetailRow(Icons.phone_iphone_rounded, 'Phone', student.parentPhone),
+                const SizedBox(height: 16),
+
+                // Route Details
+                const Text(
+                  'Route & Stop Locations',
+                  style: TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                _buildModalDetailRow(Icons.location_on_rounded, 'Pickup Point', student.pickupPoint.isNotEmpty ? student.pickupPoint : 'Not set'),
+                _buildModalDetailRow(Icons.location_searching_rounded, 'Drop Point', student.dropPoint.isNotEmpty ? student.dropPoint : 'Not set'),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close', style: TextStyle(color: AppTheme.primaryLight, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildModalDetailRow(IconData icon, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, size: 16, color: AppTheme.textMuted),
+          const SizedBox(width: 8),
+          Text(
+            '$label: ',
+            style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              style: const TextStyle(fontSize: 12, color: Colors.white),
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildStudentCard(BuildContext context, StudentModel student) {
+    return GestureDetector(
+      onTap: () => _showStudentDetailsDialog(context, student),
+      child: GlassCard(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Row 1: Header (Name & Status Badge & Actions)
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppTheme.primaryColor.withOpacity(0.12),
+                  child: const Icon(Icons.face_rounded, color: AppTheme.primaryLight),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            student.name,
+                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                          ),
+                          if (student.hasCustomTimings) ...[
+                            const SizedBox(width: 6),
+                            const Icon(Icons.alarm_rounded, size: 14, color: AppTheme.accentLight),
+                          ],
+                        ],
+                      ),
+                      Text(
+                        '${student.schoolName} • ${student.className} - ${student.section}',
+                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (val) {
+                    if (val == 'edit') {
+                      _showStudentForm(context, student);
+                    } else if (val == 'delete') {
+                      _showDeleteConfirm(context, student);
+                    } else if (val == 'qr') {
+                      Navigator.pushNamed(context, '/qr-card', arguments: student);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'qr',
+                      child: Row(
+                        children: [
+                          Icon(Icons.qr_code_rounded, size: 18, color: AppTheme.accentLight),
+                          SizedBox(width: 8),
+                          Text('View Pass QR'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_rounded, size: 18, color: AppTheme.primaryLight),
+                          SizedBox(width: 8),
+                          Text('Edit Details'),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_forever_rounded, size: 18, color: AppTheme.error),
+                          SizedBox(width: 8),
+                          Text('Remove Student', style: TextStyle(color: AppTheme.error)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 12),
+              child: Divider(color: Colors.white10, height: 1),
+            ),
+            // Row 2: Details Grid
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDetailRow(Icons.person_outline_rounded, 'Parent', student.parentName),
+                      const SizedBox(height: 8),
+                      _buildDetailRow(Icons.phone_iphone_rounded, 'Phone', student.parentPhone),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildDetailRow(Icons.location_on_outlined, 'Pickup', student.pickupPoint.isNotEmpty ? student.pickupPoint : 'Not set'),
+                      const SizedBox(height: 8),
+                      _buildDetailRow(Icons.location_searching_rounded, 'Drop', student.dropPoint.isNotEmpty ? student.dropPoint : 'Not set'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

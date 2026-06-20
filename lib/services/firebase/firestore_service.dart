@@ -820,8 +820,10 @@ class MockFirestoreService implements FirestoreService {
       _trips[tripId] = updated;
       _tripStreamControllers[tripId]?.add(updated);
       
-      // Update vehicle coordinates too
-      updateVehicleLocation('mock-vehicle-1', lat, lng);
+      // Update vehicle coordinates too (fire and forget, with error handling)
+      updateVehicleLocation('mock-vehicle-1', lat, lng).catchError((_) {
+        // Silently catch errors (e.g., if vehicle doesn't exist)
+      });
       
       if (nextStatus == TripStatus.completed) {
         for (var sid in currentTrip.studentIds) {

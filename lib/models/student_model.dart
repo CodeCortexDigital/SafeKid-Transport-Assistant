@@ -24,6 +24,9 @@ class StudentModel {
   final double? pickupLongitude;
   final double? dropLatitude;
   final double? dropLongitude;
+  final String? customPickupTime;
+  final String? customDropTime;
+  final bool hasCustomTimings;
 
   StudentModel({
     required this.id,
@@ -44,6 +47,9 @@ class StudentModel {
     this.pickupLongitude,
     this.dropLatitude,
     this.dropLongitude,
+    this.customPickupTime,
+    this.customDropTime,
+    this.hasCustomTimings = false,
   });
 
   factory StudentModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -66,6 +72,9 @@ class StudentModel {
       pickupLongitude: (json['pickupLongitude'] as num?)?.toDouble(),
       dropLatitude: (json['dropLatitude'] as num?)?.toDouble(),
       dropLongitude: (json['dropLongitude'] as num?)?.toDouble(),
+      customPickupTime: json['customPickupTime'],
+      customDropTime: json['customDropTime'],
+      hasCustomTimings: json['hasCustomTimings'] ?? false,
     );
   }
 
@@ -88,6 +97,9 @@ class StudentModel {
       'pickupLongitude': pickupLongitude,
       'dropLatitude': dropLatitude,
       'dropLongitude': dropLongitude,
+      'customPickupTime': customPickupTime,
+      'customDropTime': customDropTime,
+      'hasCustomTimings': hasCustomTimings,
     };
   }
 
@@ -119,6 +131,9 @@ class StudentModel {
     double? pickupLongitude,
     double? dropLatitude,
     double? dropLongitude,
+    String? customPickupTime,
+    String? customDropTime,
+    bool? hasCustomTimings,
   }) {
     return StudentModel(
       id: id ?? this.id,
@@ -139,6 +154,9 @@ class StudentModel {
       pickupLongitude: pickupLongitude ?? this.pickupLongitude,
       dropLatitude: dropLatitude ?? this.dropLatitude,
       dropLongitude: dropLongitude ?? this.dropLongitude,
+      customPickupTime: customPickupTime ?? this.customPickupTime,
+      customDropTime: customDropTime ?? this.customDropTime,
+      hasCustomTimings: hasCustomTimings ?? this.hasCustomTimings,
     );
   }
 }

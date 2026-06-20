@@ -53,6 +53,154 @@ class _ParentDashboardState extends State<ParentDashboard> {
     });
   }
 
+  void _showCustomTimingsDialog(BuildContext context, StudentModel student) {
+    bool hasCustom = student.hasCustomTimings;
+    final pickupController = TextEditingController(text: student.customPickupTime ?? '08:30 AM');
+    final dropController = TextEditingController(text: student.customDropTime ?? '01:30 PM');
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.white.withOpacity(0.08)),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.alarm_rounded, color: AppTheme.accentLight),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Schedule Tomorrow: ${student.name}',
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'If tomorrow\'s timing is different from the regular schedule (e.g. university class changes, early/late pack-up), configure it below. The driver will see this custom timing for route scheduling.',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        const Text(
+                          'Enable Custom Timing',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
+                        ),
+                        const Spacer(),
+                        Switch(
+                          value: hasCustom,
+                          activeColor: AppTheme.accentLight,
+                          onChanged: (val) {
+                            setDialogState(() {
+                              hasCustom = val;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    if (hasCustom) ...[
+                      const SizedBox(height: 16),
+                      // Pickup Time selection
+                      const Text(
+                        'Tomorrow\'s Pickup / Class Start Time',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: pickupController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. 08:30 AM',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight),
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (time != null) {
+                                pickupController.text = time.format(context);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Drop Time selection
+                      const Text(
+                        'Tomorrow\'s Packup / Drop Time',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        controller: dropController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'e.g. 01:30 PM',
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight),
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (time != null) {
+                                dropController.text = time.format(context);
+                              }
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final attendanceProv = Provider.of<AttendanceProvider>(context, listen: false);
+                    final updatedStudent = student.copyWith(
+                      hasCustomTimings: hasCustom,
+                      customPickupTime: hasCustom ? pickupController.text.trim() : null,
+                      customDropTime: hasCustom ? dropController.text.trim() : null,
+                    );
+                    final success = await attendanceProv.editStudent(updatedStudent);
+                    if (success && context.mounted) {
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Timings for ${student.name} updated successfully!'),
+                          backgroundColor: AppTheme.success,
+                        ),
+                      );
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
+                  child: const Text('Save Schedule', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final attendance = Provider.of<AttendanceProvider>(context);
@@ -283,6 +431,33 @@ class _ParentDashboardState extends State<ParentDashboard> {
               ),
             ],
             const SizedBox(height: 20),
+            if (student.hasCustomTimings) ...[
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.25), width: 1),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.alarm_rounded, size: 16, color: AppTheme.accentLight),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Tomorrow\'s Custom Timing: Pickup at ${student.customPickupTime ?? "N/A"}, Drop at ${student.customDropTime ?? "N/A"}',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppTheme.accentLight,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
 
             // Row 2: Status Timeline Title
             const Text(
@@ -351,6 +526,13 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
                   label: const Text('Chat'),
                   style: TextButton.styleFrom(foregroundColor: AppTheme.primaryLight),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  onPressed: () => _showCustomTimingsDialog(context, student),
+                  icon: const Icon(Icons.alarm_rounded, size: 16),
+                  label: const Text('Schedule'),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
                 ),
                 const SizedBox(width: 8),
                 TextButton.icon(
