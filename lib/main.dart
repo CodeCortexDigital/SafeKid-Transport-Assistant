@@ -19,6 +19,13 @@ import 'screens/home/home_screen.dart';
 import 'screens/student_management/student_management_screen.dart';
 import 'screens/student_management/qr_card_screen.dart';
 import 'screens/student_management/qr_scanner_screen.dart';
+import 'providers/chat_provider.dart';
+import 'providers/billing_provider.dart';
+import 'providers/feedback_provider.dart';
+import 'screens/chat/chat_list_screen.dart';
+import 'screens/chat/chat_screen.dart';
+import 'screens/chat/chatbot_screen.dart';
+import 'screens/notification/ai_notification_screen.dart';
 
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
@@ -69,6 +76,15 @@ class SafeKidApp extends StatelessWidget {
             ChangeNotifierProvider<AttendanceProvider>(
               create: (_) => AttendanceProvider(appState.studentRepository),
             ),
+            ChangeNotifierProvider<ChatProvider>(
+              create: (_) => ChatProvider(appState.messageRepository, appState.firestoreService),
+            ),
+            ChangeNotifierProvider<BillingProvider>(
+              create: (_) => BillingProvider(appState.billingRepository),
+            ),
+            ChangeNotifierProvider<FeedbackProvider>(
+              create: (_) => FeedbackProvider(appState.feedbackRepository),
+            ),
           ],
           child: MaterialApp(
             title: AppConstants.appTitle,
@@ -83,6 +99,10 @@ class SafeKidApp extends StatelessWidget {
               AppConstants.routeStudentManagement: (context) => const StudentManagementScreen(),
               AppConstants.routeQrCard: (context) => const QrCardScreen(),
               AppConstants.routeQrScanner: (context) => const QrScannerScreen(),
+              AppConstants.routeChatList: (context) => const ChatListScreen(),
+              AppConstants.routeChat: (context) => const ChatScreen(),
+              AppConstants.routeChatbot: (context) => const ChatbotScreen(),
+              AppConstants.routeAiNotification: (context) => const AiNotificationScreen(),
               '/otp': (context) => const OtpScreen(),
               '/profile-setup': (context) => const ProfileSetupScreen(),
             },

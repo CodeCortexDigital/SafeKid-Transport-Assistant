@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart';
 import '../../models/user_model.dart';
 import '../../core/errors/failures.dart';
 
@@ -11,6 +13,7 @@ abstract class AuthService {
   });
   
   Future<UserModel> signInWithOtp(String verificationId, String smsCode);
+  Future<UserModel> signInWithGoogle();
   Future<void> signOut();
   UserModel? get currentUser;
   Stream<UserModel?> get authStateChanges;
@@ -19,6 +22,9 @@ abstract class AuthService {
 /// Production implementation of [AuthService] using Firebase Auth
 class FirebaseAuthService implements AuthService {
   final fb.FirebaseAuth _firebaseAuth = fb.FirebaseAuth.instance;
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['profile', 'email'],
+  );
 
   UserModel _mapFirebaseUser(fb.User user) {
     return UserModel(
@@ -88,7 +94,54 @@ class FirebaseAuthService implements AuthService {
   }
 
   @override
+  Future<UserModel> signInWithGoogle() async {
+    try {
+      if (kIsWeb) {
+        final provider = fb.GoogleAuthProvider();
+        final userCredential = await _firebaseAuth.signInWithPopup(provider);
+        if (userCredential.user == null) {
+          throw const AuthFailure('Google sign-in failed. User is null.');
+        }
+        return _mapFirebaseUser(userCredential.user!);
+      }
+
+      // Sign out previous session if any
+      await _googleSignIn.signOut();
+      
+      // Trigger Google Sign-In flow on mobile
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      
+      if (googleUser == null) {
+        throw const AuthFailure('Google sign-in was cancelled.');
+      }
+
+      // Get Google Auth credential
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final credential = fb.GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // Sign in to Firebase with Google credential
+      final userCredential = await _firebaseAuth.signInWithCredential(credential);
+      
+      if (userCredential.user == null) {
+        throw const AuthFailure('Google sign-in failed. User is null.');
+      }
+      
+      return _mapFirebaseUser(userCredential.user!);
+    } on fb.FirebaseAuthException catch (e) {
+      throw AuthFailure(e.message ?? 'Google sign-in failed.');
+    } catch (e) {
+      throw AuthFailure('Google sign-in error: ${e.toString()}');
+    }
+  }
+
+  @override
   Future<void> signOut() async {
+    if (!kIsWeb) {
+      await _googleSignIn.signOut();
+    }
     await _firebaseAuth.signOut();
   }
 }
@@ -168,6 +221,21 @@ class MockAuthService implements AuthService {
     } else {
       throw const AuthFailure('Invalid verification code. Enter 123456 to log in.');
     }
+  }
+
+  @override
+  Future<UserModel> signInWithGoogle() async {
+    await Future.delayed(const Duration(milliseconds: 800));
+    // Mock Google sign-in
+    _currentUser = UserModel(
+      id: 'mock-google-uid-${DateTime.now().millisecondsSinceEpoch}',
+      name: 'Demo Google User',
+      phone: '', // Google sign-in doesn't provide phone
+      role: UserRole.parent,
+      createdAt: DateTime.now(),
+    );
+    _authStateController.add(_currentUser);
+    return _currentUser!;
   }
 
   @override

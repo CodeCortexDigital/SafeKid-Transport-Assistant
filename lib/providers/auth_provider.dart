@@ -132,6 +132,43 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  /// Signs in with Google account
+  Future<bool> signInWithGoogle() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final authUser = await _authRepository.signInWithGoogle();
+      
+      // Check if profile document exists in Firestore
+      final profile = await _authRepository.getUserProfile(authUser.id);
+      
+      if (profile != null) {
+        _user = profile;
+        _needsRegistration = false;
+      } else {
+        // Profile setup is required
+        _user = authUser;
+        _needsRegistration = true;
+      }
+      
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } on Failure catch (e) {
+      _errorMessage = e.message;
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   /// Inserts a new user profile document into the Firestore users collection
   Future<bool> registerUserProfile(String name, UserRole role) async {
     if (_user == null) {

@@ -6,8 +6,13 @@ import '../../../providers/attendance_provider.dart';
 import '../../../models/student_model.dart';
 import '../../../models/billing_model.dart';
 import '../../../models/message_model.dart';
+import '../../../providers/billing_provider.dart';
+import '../../../providers/feedback_provider.dart';
+import '../../../models/feedback_model.dart';
+import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/glass_card.dart';
+import '../../../widgets/driver_performance_card.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -89,6 +94,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
           },
         ),
         const SizedBox(height: 24),
+        const DriverPerformanceCard(),
+        const SizedBox(height: 24),
 
         // Quick Actions Section Title
         const Text(
@@ -141,7 +148,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   icon: Icons.chat_bubble_rounded,
                   color: AppTheme.info,
                   width: actionWidth,
-                  onTap: () => _showMessagesDialog(context),
+                  onTap: () => Navigator.pushNamed(context, AppConstants.routeChatList),
                 ),
                 _buildActionCard(
                   title: 'Billing',
@@ -156,6 +163,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   color: Colors.purple,
                   width: actionWidth,
                   onTap: () => _showReportsDialog(context),
+                ),
+                _buildActionCard(
+                  title: 'AI Alerts',
+                  icon: Icons.notification_add_rounded,
+                  color: Colors.deepOrangeAccent,
+                  width: actionWidth,
+                  onTap: () => Navigator.pushNamed(context, AppConstants.routeAiNotification),
                 ),
               ],
             );
@@ -512,7 +526,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
   // --- ACTIONS: BILLING ---
   void _showBillingDialog(BuildContext context) {
-    final firestoreService = Provider.of<AppStateProvider>(context, listen: false).firestoreService;
+    final attendance = Provider.of<AttendanceProvider>(context, listen: false);
+    final billingProvider = Provider.of<BillingProvider>(context, listen: false);
+
+    // Extract unique parent UIDs from students assigned to this driver
+    final parentIds = attendance.myStudents
+        .map((s) => s.parentUid)
+        .where((uid) => uid.isNotEmpty)
+        .toSet()
+        .toList();
 
     showDialog(
       context: context,
@@ -531,79 +553,142 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
           content: SizedBox(
             width: double.maxFinite,
-            height: 350,
+            height: 400,
             child: Column(
               children: [
                 // Quick Summary Row
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.03),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      Column(
+                StreamBuilder<List<BillingModel>>(
+                  stream: billingProvider.streamDriverRouteBills(parentIds),
+                  builder: (context, snapshot) {
+                    final bills = snapshot.data ?? [];
+                    final double collected = bills
+                        .where((b) => b.status.toLowerCase() == 'paid')
+                        .fold(0.0, (sum, b) => sum + b.amount);
+                    final double pending = bills
+                        .where((b) => b.status.toLowerCase() != 'paid')
+                        .fold(0.0, (sum, b) => sum + b.amount);
+                    final double total = collected + pending;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                         children: [
-                          Text('Collected', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                          SizedBox(height: 4),
-                          Text('\$150.00', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.success)),
+                          _buildSummaryCol('Collected', '\$${collected.toStringAsFixed(2)}', AppTheme.success),
+                          Container(width: 1, height: 36, color: Colors.white12),
+                          _buildSummaryCol('Pending', '\$${pending.toStringAsFixed(2)}', AppTheme.warning),
+                          Container(width: 1, height: 36, color: Colors.white12),
+                          _buildSummaryCol('Total Fees', '\$${total.toStringAsFixed(2)}', AppTheme.primaryLight),
                         ],
                       ),
-                      VerticalDivider(color: Colors.white24, width: 20),
-                      Column(
-                        children: [
-                          Text('Pending', style: TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
-                          SizedBox(height: 4),
-                          Text('\$150.00', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.warning)),
-                        ],
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 Expanded(
                   child: StreamBuilder<List<BillingModel>>(
-                    stream: firestoreService.streamBillingRecords('mock-parent-uid-123'),
+                    stream: billingProvider.streamDriverRouteBills(parentIds),
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
+                        return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
                       }
                       final records = snapshot.data ?? [];
                       if (records.isEmpty) {
-                        return const Center(child: Text('No billing history found', style: TextStyle(color: AppTheme.textSecondary)));
+                        return const Center(
+                          child: Text(
+                            'No billing history found',
+                            style: TextStyle(color: AppTheme.textSecondary),
+                          ),
+                        );
                       }
                       return ListView.separated(
+                        physics: const BouncingScrollPhysics(),
                         itemCount: records.length,
-                        separatorBuilder: (_, __) => const Divider(color: Colors.white12, height: 12),
+                        separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 16),
                         itemBuilder: (context, index) {
                           final bill = records[index];
                           final isPaid = bill.status.toLowerCase() == 'paid';
+
+                          // Resolve parent's name from route students
+                          final student = attendance.myStudents.firstWhere(
+                            (s) => s.parentUid == bill.parentId,
+                            orElse: () => StudentModel(
+                              id: '',
+                              name: '',
+                              className: '',
+                              section: '',
+                              schoolName: '',
+                              parentUid: bill.parentId,
+                              parentName: 'Parent (ID: ${bill.parentId.length > 5 ? bill.parentId.substring(0, 5) : bill.parentId})',
+                              qrCodeData: '',
+                            ),
+                          );
+                          final parentName = student.parentName.isNotEmpty
+                              ? student.parentName
+                              : 'Parent (ID: ${bill.parentId.length > 5 ? bill.parentId.substring(0, 5) : bill.parentId})';
+
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
                             leading: CircleAvatar(
-                              backgroundColor: (isPaid ? AppTheme.success : AppTheme.warning).withOpacity(0.1),
+                              backgroundColor: (isPaid ? AppTheme.success : AppTheme.warning).withOpacity(0.12),
                               child: Icon(
                                 isPaid ? Icons.check_circle_outline_rounded : Icons.hourglass_empty_rounded,
                                 color: isPaid ? AppTheme.success : AppTheme.warning,
+                                size: 20,
                               ),
                             ),
                             title: Text(
-                              'John Doe (Parent Invoice)',
+                              parentName,
                               style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                             subtitle: Text(
-                              'Due: ${bill.dueDate.day}/${bill.dueDate.month}/${bill.dueDate.year}',
+                              'Due Date: ${bill.dueDate.day}/${bill.dueDate.month}/${bill.dueDate.year}',
                               style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary),
                             ),
-                            trailing: Text(
-                              '\$${bill.amount.toStringAsFixed(2)}',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: isPaid ? AppTheme.success : AppTheme.warning,
-                              ),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  children: [
+                                    Text(
+                                      '\$${bill.amount.toStringAsFixed(2)}',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                        color: isPaid ? AppTheme.success : AppTheme.warning,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      bill.status.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        color: isPaid ? AppTheme.success : AppTheme.warning,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                if (!isPaid) ...[
+                                  const SizedBox(width: 8),
+                                  IconButton(
+                                    icon: const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 22),
+                                    onPressed: () {
+                                      billingProvider.markAsPaid(bill.id);
+                                    },
+                                    tooltip: 'Mark as Paid',
+                                  ),
+                                ],
+                              ],
                             ),
                           );
                         },
@@ -625,8 +710,24 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
+  Widget _buildSummaryCol(String label, String value, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: color),
+        ),
+      ],
+    );
+  }
+
   // --- ACTIONS: REPORTS ---
   void _showReportsDialog(BuildContext context) {
+    final feedbackProvider = Provider.of<FeedbackProvider>(context, listen: false);
+
     showDialog(
       context: context,
       builder: (context) {
@@ -637,42 +738,142 @@ class _DriverDashboardState extends State<DriverDashboard> {
               Icon(Icons.insights_rounded, color: Colors.purple),
               SizedBox(width: 8),
               Text(
-                'Route Analysis Report',
+                'Feedback & Ratings Console',
                 style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 18),
               ),
             ],
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildReportItem('Attendance Rate', '96.4%', Icons.check_circle_outline_rounded, AppTheme.success),
-              const SizedBox(height: 12),
-              _buildReportItem('Total Mileage (Month)', '154 km', Icons.directions_bus_filled_outlined, AppTheme.info),
-              const SizedBox(height: 12),
-              _buildReportItem('On-Time Schedule Performance', '98.1%', Icons.schedule_rounded, AppTheme.accentLight),
-              const SizedBox(height: 12),
-              _buildReportItem('Boarding QR Verification Failures', '0 incidents', Icons.warning_amber_rounded, AppTheme.warning),
-              const SizedBox(height: 16),
-              const Text(
-                'All tracking metrics remain highly stable. Report auto-generated weekly.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
-              ),
-            ],
+          content: SizedBox(
+            width: double.maxFinite,
+            height: 420,
+            child: StreamBuilder<List<FeedbackModel>>(
+              stream: feedbackProvider.watchAllFeedback(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+                }
+
+                final feedbacks = snapshot.data ?? [];
+
+                // Calculate category averages
+                double avgDriver = 0.0;
+                double avgSafety = 0.0;
+                double avgPunctuality = 0.0;
+
+                if (feedbacks.isNotEmpty) {
+                  final totalDriver = feedbacks.fold<int>(0, (sum, f) => sum + f.driverRating);
+                  final totalSafety = feedbacks.fold<int>(0, (sum, f) => sum + f.safetyRating);
+                  final totalPunctuality = feedbacks.fold<int>(0, (sum, f) => sum + f.punctualityRating);
+
+                  avgDriver = totalDriver / feedbacks.length;
+                  avgSafety = totalSafety / feedbacks.length;
+                  avgPunctuality = totalPunctuality / feedbacks.length;
+                }
+
+                return Column(
+                  children: [
+                    // Summary Ratings Row
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: [
+                          _buildRatingCol('Driver', avgDriver, Colors.amber),
+                          Container(width: 1, height: 36, color: Colors.white12),
+                          _buildRatingCol('Safety', avgSafety, AppTheme.success),
+                          Container(width: 1, height: 36, color: Colors.white12),
+                          _buildRatingCol('Punctuality', avgPunctuality, AppTheme.accentLight),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Align(
+                      alignment: Alignment.centerLeft,
+                      child: Text(
+                        'Recent Parent Comments',
+                        style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Expanded(
+                      child: feedbacks.isEmpty
+                          ? const Center(
+                              child: Text(
+                                'No feedback submitted yet.',
+                                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                              ),
+                            )
+                          : ListView.separated(
+                              physics: const BouncingScrollPhysics(),
+                              itemCount: feedbacks.length,
+                              separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 16),
+                              itemBuilder: (context, index) {
+                                final item = feedbacks[index];
+                                final hasComments = item.comments.trim().isNotEmpty;
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text(
+                                          item.userName,
+                                          style: const TextStyle(
+                                            fontSize: 13,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        Text(
+                                          '${item.createdAt.day}/${item.createdAt.month}/${item.createdAt.year}',
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: AppTheme.textMuted,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        _buildMiniStars(item.rating),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          'Avg: ${item.rating}.0',
+                                          style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                    if (hasComments) ...[
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        item.comments,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          color: AppTheme.textSecondary,
+                                          height: 1.3,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                );
+              },
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
               child: const Text('Close', style: TextStyle(color: AppTheme.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Route report exported to local storage.')),
-                );
-              },
-              child: const Text('Export PDF'),
             ),
           ],
         );
@@ -680,30 +881,37 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  Widget _buildReportItem(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.02),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+  Widget _buildRatingCol(String title, double avg, Color color) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(title, style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary)),
+        const SizedBox(height: 4),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              avg == 0.0 ? '--' : avg.toStringAsFixed(1),
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
             ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-          ),
-        ],
-      ),
+            const SizedBox(width: 2),
+            Icon(Icons.star_rounded, color: color, size: 16),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMiniStars(int rating) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        return Icon(
+          index < rating ? Icons.star_rounded : Icons.star_border_rounded,
+          color: Colors.amber,
+          size: 14,
+        );
+      }),
     );
   }
 

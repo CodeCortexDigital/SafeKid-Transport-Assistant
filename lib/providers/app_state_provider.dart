@@ -52,7 +52,7 @@ class AppStateProvider extends ChangeNotifier {
         // Fallback to manual options matching the provided web parameters
         await Firebase.initializeApp(
           options: const FirebaseOptions(
-            apiKey: 'AIzaSyD7kbY4q9yTC5yhwlkrqViy_8p_LBF_MgA',
+                apiKey: 'AIzaSyD7kBY4q9yTC5yhwlkrqViy_8p_LBF_MgA',
             appId: '1:473302958295:web:6bad73cc657a509cedb092',
             messagingSenderId: '473302958295',
             projectId: 'safekid-transport-assistant',

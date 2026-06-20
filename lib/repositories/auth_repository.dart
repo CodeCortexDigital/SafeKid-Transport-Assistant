@@ -28,6 +28,10 @@ class AuthRepository {
     return await _authService.signInWithOtp(verificationId, smsCode);
   }
 
+  Future<UserModel> signInWithGoogle() async {
+    return await _authService.signInWithGoogle();
+  }
+
   Future<void> signOut() async {
     await _authService.signOut();
   }

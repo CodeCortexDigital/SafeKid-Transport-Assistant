@@ -9,4 +9,8 @@ class FeedbackRepository {
   Future<void> submit(FeedbackModel feedback) async {
     await _firestoreService.submitFeedback(feedback);
   }
+
+  Stream<List<FeedbackModel>> watchAllFeedback() {
+    return _firestoreService.streamAllFeedback();
+  }
 }

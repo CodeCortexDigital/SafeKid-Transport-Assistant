@@ -50,10 +50,14 @@ abstract class FirestoreService {
 
   // Feedback
   Future<void> submitFeedback(FeedbackModel feedback);
+  Stream<List<FeedbackModel>> streamAllFeedback();
 
   // Billing
   Future<List<BillingModel>> getBillingRecords(String parentId);
   Stream<List<BillingModel>> streamBillingRecords(String parentId);
+  Future<void> updateBillingStatus(String billId, String status, {String? paymentMethod});
+  Future<List<BillingModel>> getBillingRecordsForParents(List<String> parentIds);
+  Stream<List<BillingModel>> streamBillingRecordsForParents(List<String> parentIds);
 }
 
 /// Production implementation using Firebase Cloud Firestore
@@ -409,6 +413,15 @@ class FirebaseFirestoreService implements FirestoreService {
   }
 
   @override
+  Stream<List<FeedbackModel>> streamAllFeedback() {
+    return _firestore
+        .collection('feedback')
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => FeedbackModel.fromJson(doc.data(), doc.id)).toList());
+  }
+
+  @override
   Future<List<BillingModel>> getBillingRecords(String parentId) async {
     try {
       final snap = await _firestore
@@ -426,6 +439,43 @@ class FirebaseFirestoreService implements FirestoreService {
     return _firestore
         .collection('billing')
         .where('parentId', isEqualTo: parentId)
+        .snapshots()
+        .map((snap) => snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList());
+  }
+
+  @override
+  Future<void> updateBillingStatus(String billId, String status, {String? paymentMethod}) async {
+    try {
+      final data = <String, dynamic>{'status': status};
+      if (paymentMethod != null) {
+        data['paymentMethod'] = paymentMethod;
+      }
+      await _firestore.collection('billing').doc(billId).update(data);
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<List<BillingModel>> getBillingRecordsForParents(List<String> parentIds) async {
+    if (parentIds.isEmpty) return [];
+    try {
+      final snap = await _firestore
+          .collection('billing')
+          .where('parentId', whereIn: parentIds)
+          .get();
+      return snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Stream<List<BillingModel>> streamBillingRecordsForParents(List<String> parentIds) {
+    if (parentIds.isEmpty) return Stream.value([]);
+    return _firestore
+        .collection('billing')
+        .where('parentId', whereIn: parentIds)
         .snapshots()
         .map((snap) => snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList());
   }
@@ -447,6 +497,7 @@ class MockFirestoreService implements FirestoreService {
   final Map<String, StreamController<TripModel>> _tripStreamControllers = {};
   final Map<String, StreamController<List<MessageModel>>> _messageStreamControllers = {};
   final Map<String, StreamController<List<BillingModel>>> _billingStreamControllers = {};
+  final StreamController<List<FeedbackModel>> _feedbackStreamController = StreamController<List<FeedbackModel>>.broadcast();
 
   MockFirestoreService() {
     // Users
@@ -867,6 +918,15 @@ class MockFirestoreService implements FirestoreService {
   Future<void> submitFeedback(FeedbackModel feed) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _feedback[feed.id] = feed;
+    final list = _feedback.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    _feedbackStreamController.add(list);
+  }
+
+  @override
+  Stream<List<FeedbackModel>> streamAllFeedback() {
+    final list = _feedback.values.toList()..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    Future.microtask(() => _feedbackStreamController.add(list));
+    return _feedbackStreamController.stream;
   }
 
   @override
@@ -882,6 +942,43 @@ class MockFirestoreService implements FirestoreService {
       () => StreamController<List<BillingModel>>.broadcast()
     );
     final initialList = _billing.values.where((bill) => bill.parentId == parentId).toList();
+    controller.add(initialList);
+    return controller.stream;
+  }
+
+  @override
+  Future<void> updateBillingStatus(String billId, String status, {String? paymentMethod}) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final bill = _billing[billId];
+    if (bill != null) {
+      _billing[billId] = bill.copyWith(status: status, paymentMethod: paymentMethod);
+      final parentId = bill.parentId;
+      
+      // Notify parent stream and any parents list streams
+      _billingStreamControllers.forEach((key, controller) {
+        final keys = key.split('_');
+        if (keys.contains(parentId) || key == parentId) {
+          final list = _billing.values.where((b) => keys.contains(b.parentId) || b.parentId == key).toList();
+          controller.add(list);
+        }
+      });
+    }
+  }
+
+  @override
+  Future<List<BillingModel>> getBillingRecordsForParents(List<String> parentIds) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    return _billing.values.where((bill) => parentIds.contains(bill.parentId)).toList();
+  }
+
+  @override
+  Stream<List<BillingModel>> streamBillingRecordsForParents(List<String> parentIds) {
+    final queryKey = parentIds.join('_');
+    final controller = _billingStreamControllers.putIfAbsent(
+      queryKey, 
+      () => StreamController<List<BillingModel>>.broadcast()
+    );
+    final initialList = _billing.values.where((bill) => parentIds.contains(bill.parentId)).toList();
     controller.add(initialList);
     return controller.stream;
   }

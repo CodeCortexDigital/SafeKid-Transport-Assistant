@@ -15,6 +15,8 @@ import '../../widgets/custom_button.dart';
 import 'widgets/driver_dashboard.dart';
 import 'widgets/parent_dashboard.dart';
 import '../../widgets/interactive_google_map.dart';
+import '../../providers/chat_provider.dart';
+import 'dart:async';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -38,6 +40,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // For driver/assistant: load mock route boarding students
           attendance.fetchMyStudents('mock-parent-uid-123');
         }
+        // Fetch conversations for chat unread badges
+        Provider.of<ChatProvider>(context, listen: false).fetchConversations(user.id, user.role);
       }
     });
   }
@@ -115,6 +119,23 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.chat_bubble_outline_rounded, color: AppTheme.textSecondary),
+                onPressed: () {
+                  Navigator.pushNamed(context, AppConstants.routeChatList);
+                },
+                tooltip: 'Messages',
+              ),
+              Positioned(
+                right: 6,
+                top: 6,
+                child: TotalUnreadBadge(currentUserId: user.id),
+              ),
+            ],
+          ),
           IconButton(
             icon: const Icon(Icons.logout_rounded, color: AppTheme.textSecondary),
             onPressed: _handleLogout,
@@ -128,6 +149,15 @@ class _HomeScreenState extends State<HomeScreen> {
           tablet: _buildTabletDashboard(context, user),
         ),
       ),
+      floatingActionButton: user.role == UserRole.parent
+          ? FloatingActionButton(
+              onPressed: () {
+                Navigator.pushNamed(context, AppConstants.routeChatbot);
+              },
+              backgroundColor: AppTheme.primaryColor,
+              child: const Icon(Icons.support_agent_rounded, color: Colors.white),
+            )
+          : null,
     );
   }
 
@@ -359,6 +389,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 icon: Icons.qr_code_scanner_rounded,
                 onPressed: () => Navigator.pushNamed(context, AppConstants.routeQrScanner),
               ),
+              const SizedBox(height: 12),
+              CustomButton(
+                text: 'Generate AI Alerts',
+                icon: Icons.notification_add_rounded,
+                onPressed: () => Navigator.pushNamed(context, AppConstants.routeAiNotification),
+              ),
               const SizedBox(height: 20),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -416,6 +452,147 @@ class _HomeScreenState extends State<HomeScreen> {
           childName: student?.name ?? 'Child',
         );
       },
+    );
+  }
+}
+
+class TotalUnreadBadge extends StatelessWidget {
+  final String currentUserId;
+  const TotalUnreadBadge({super.key, required this.currentUserId});
+
+  @override
+  Widget build(BuildContext context) {
+    final chatProvider = Provider.of<ChatProvider>(context);
+    
+    if (chatProvider.conversations.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    if (chatProvider.conversations.length == 1) {
+      return StreamBuilder<int>(
+        stream: chatProvider.watchUnreadCount(currentUserId, chatProvider.conversations.first.id),
+        builder: (context, snapshot) {
+          final count = snapshot.data ?? 0;
+          if (count == 0) return const SizedBox.shrink();
+          return _buildBadge(count);
+        },
+      );
+    }
+
+    return _MultiUnreadBadge(
+      currentUserId: currentUserId,
+      partners: chatProvider.conversations,
+    );
+  }
+
+  Widget _buildBadge(int count) {
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: const BoxDecoration(
+          color: AppTheme.error,
+          shape: BoxShape.circle,
+        ),
+        constraints: const BoxConstraints(
+          minWidth: 16,
+          minHeight: 16,
+        ),
+        child: Text(
+          '$count',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+class _MultiUnreadBadge extends StatefulWidget {
+  final String currentUserId;
+  final List<UserModel> partners;
+  const _MultiUnreadBadge({required this.currentUserId, required this.partners});
+
+  @override
+  State<_MultiUnreadBadge> createState() => _MultiUnreadBadgeState();
+}
+
+class _MultiUnreadBadgeState extends State<_MultiUnreadBadge> {
+  final Map<String, int> _unreadCounts = {};
+  final List<StreamSubscription> _subscriptions = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _subscribe();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MultiUnreadBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.partners != widget.partners || oldWidget.currentUserId != widget.currentUserId) {
+      _unsubscribe();
+      _subscribe();
+    }
+  }
+
+  @override
+  void dispose() {
+    _unsubscribe();
+    super.dispose();
+  }
+
+  void _unsubscribe() {
+    for (final sub in _subscriptions) {
+      sub.cancel();
+    }
+    _subscriptions.clear();
+    _unreadCounts.clear();
+  }
+
+  void _subscribe() {
+    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+    for (final partner in widget.partners) {
+      final sub = chatProvider.watchUnreadCount(widget.currentUserId, partner.id).listen((count) {
+        if (mounted) {
+          setState(() {
+            _unreadCounts[partner.id] = count;
+          });
+        }
+      });
+      _subscriptions.add(sub);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _unreadCounts.values.fold(0, (sum, count) => sum + count);
+    if (total == 0) return const SizedBox.shrink();
+
+    return IgnorePointer(
+      child: Container(
+        padding: const EdgeInsets.all(4),
+        decoration: const BoxDecoration(
+          color: AppTheme.error,
+          shape: BoxShape.circle,
+        ),
+        constraints: const BoxConstraints(
+          minWidth: 16,
+          minHeight: 16,
+        ),
+        child: Text(
+          '$total',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 9,
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
     );
   }
 }

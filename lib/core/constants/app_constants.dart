@@ -15,6 +15,8 @@ class AppConstants {
   static const String routeQrScanner = '/qr-scanner';
   static const String routeChatList = '/chat-list';
   static const String routeChat = '/chat';
+  static const String routeChatbot = '/chatbot';
+  static const String routeAiNotification = '/ai-notification';
 
   // Firestore Collection Names
   static const String usersCollection = 'users';

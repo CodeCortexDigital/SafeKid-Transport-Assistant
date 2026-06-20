@@ -117,6 +117,56 @@ class _LoginScreenState extends State<LoginScreen> {
               },
             ),
             
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'OR',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
+              ],
+            ),
+            
+            const SizedBox(height: 24),
+            Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                return ElevatedButton.icon(
+                  onPressed: auth.isLoading ? null : () async {
+                    final success = await auth.signInWithGoogle();
+                    if (mounted) {
+                      if (success) {
+                        if (auth.needsRegistration) {
+                          Navigator.pushNamed(context, '/profile-setup');
+                        } else {
+                          Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+                        }
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(auth.errorMessage ?? 'Google sign-in failed'),
+                            backgroundColor: AppTheme.error,
+                          ),
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.account_circle_rounded),
+                  label: const Text('Sign in with Google'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: const Color(0xFF1F2937),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    disabledBackgroundColor: Colors.grey,
+                  ),
+                );
+              },
+            ),
+            
             if (!appState.isFirebaseInitialized) ...[
               const SizedBox(height: 24),
               Row(

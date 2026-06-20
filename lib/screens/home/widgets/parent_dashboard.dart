@@ -8,7 +8,13 @@ import '../../../models/student_model.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../widgets/glass_card.dart';
+import '../../../widgets/driver_performance_card.dart';
 import '../../../core/utils/location_utils.dart';
+import '../../../providers/chat_provider.dart';
+import '../../../models/user_model.dart';
+import '../../../providers/billing_provider.dart';
+import '../../../models/billing_model.dart';
+import '../../../providers/feedback_provider.dart';
 
 class ParentDashboard extends StatefulWidget {
   const ParentDashboard({super.key});
@@ -25,6 +31,17 @@ class _QrCodeDialog {
 }
 
 class _ParentDashboardState extends State<ParentDashboard> {
+  int _driverRating = 5;
+  int _safetyRating = 5;
+  int _punctualityRating = 5;
+  final TextEditingController _feedbackCommentsController = TextEditingController();
+
+  @override
+  void dispose() {
+    _feedbackCommentsController.dispose();
+    super.dispose();
+  }
+
   @override
   void initState() {
     super.initState();
@@ -40,6 +57,8 @@ class _ParentDashboardState extends State<ParentDashboard> {
   Widget build(BuildContext context) {
     final attendance = Provider.of<AttendanceProvider>(context);
     final appState = Provider.of<AppStateProvider>(context);
+    final authProvider = Provider.of<AuthProvider>(context);
+    final parentUser = authProvider.user;
 
     if (attendance.isLoading) {
       return const Padding(
@@ -90,6 +109,24 @@ class _ParentDashboardState extends State<ParentDashboard> {
             );
           },
         ),
+        if (parentUser != null) ...[
+          const SizedBox(height: 28),
+          const Text(
+            'Billing & Payments',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 12),
+          _buildBillingSection(context, parentUser.id),
+          const SizedBox(height: 28),
+          const Text(
+            'Rate Transport Service',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+          ),
+          const SizedBox(height: 12),
+          const DriverPerformanceCard(),
+          const SizedBox(height: 20),
+          _buildFeedbackForm(context, parentUser),
+        ],
       ],
     );
   }
@@ -284,12 +321,45 @@ class _ParentDashboardState extends State<ParentDashboard> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 TextButton.icon(
+                  onPressed: () async {
+                    final chatProvider = Provider.of<ChatProvider>(context, listen: false);
+                    final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                    final parentUser = authProvider.user;
+                    if (parentUser != null) {
+                      if (chatProvider.conversations.isEmpty) {
+                        await chatProvider.fetchConversations(parentUser.id, parentUser.role);
+                      }
+                      final driver = chatProvider.conversations.firstWhere(
+                        (u) => u.role == UserRole.driver,
+                        orElse: () => UserModel(
+                          id: 'mock-driver-uid-456',
+                          name: 'Robert Smith',
+                          phone: '',
+                          role: UserRole.driver,
+                          createdAt: DateTime.now(),
+                        ),
+                      );
+                      if (context.mounted) {
+                        Navigator.pushNamed(
+                          context,
+                          AppConstants.routeChat,
+                          arguments: driver,
+                        );
+                      }
+                    }
+                  },
+                  icon: const Icon(Icons.chat_bubble_outline_rounded, size: 16),
+                  label: const Text('Chat'),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.primaryLight),
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
                   onPressed: () => _QrCodeDialog.show(context, student),
                   icon: const Icon(Icons.qr_code_2_rounded, size: 18),
                   label: const Text('Safety Pass'),
                   style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 ElevatedButton.icon(
                   onPressed: student.status == StudentStatus.inTransit
                       ? () {
@@ -525,5 +595,247 @@ class _ParentDashboardState extends State<ParentDashboard> {
     final min = time.minute.toString().padLeft(2, '0');
     final ampm = time.hour >= 12 ? 'PM' : 'AM';
     return '$hr:$min $ampm';
+  }
+
+  Widget _buildBillingSection(BuildContext context, String parentId) {
+    final billingProvider = Provider.of<BillingProvider>(context);
+
+    return StreamBuilder<List<BillingModel>>(
+      stream: billingProvider.streamParentBills(parentId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+        }
+
+        final bills = snapshot.data ?? [];
+        if (bills.isEmpty) {
+          return const SizedBox.shrink();
+        }
+
+        // Find the latest pending invoice, or default to the most recent paid invoice
+        final activeInvoice = bills.firstWhere(
+          (b) => b.status.toLowerCase() != 'paid',
+          orElse: () => bills.first,
+        );
+
+        final isPaid = activeInvoice.status.toLowerCase() == 'paid';
+        final statusColor = isPaid ? AppTheme.success : AppTheme.warning;
+
+        return GlassCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.payment_rounded, color: statusColor, size: 22),
+                      const SizedBox(width: 8),
+                      const Text(
+                        'Transport Fees',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: statusColor.withOpacity(0.24), width: 1),
+                    ),
+                    child: Text(
+                      activeInvoice.status.toUpperCase(),
+                      style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Monthly Charge',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '\$${activeInvoice.amount.toStringAsFixed(2)}',
+                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        isPaid ? 'Paid Date' : 'Due Date',
+                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isPaid
+                            ? '${activeInvoice.billingDate.day}/${activeInvoice.billingDate.month}/${activeInvoice.billingDate.year}'
+                            : '${activeInvoice.dueDate.day}/${activeInvoice.dueDate.month}/${activeInvoice.dueDate.year}',
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              if (!isPaid) ...[
+                const SizedBox(height: 16),
+                const Divider(color: Colors.white10, height: 1),
+                const SizedBox(height: 16),
+                billingProvider.isLoading
+                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+                    : ElevatedButton.icon(
+                        onPressed: () {
+                          billingProvider.payBill(activeInvoice.id);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Simulated payment of \$150.00 processed successfully!'),
+                              backgroundColor: AppTheme.success,
+                            ),
+                          );
+                        },
+                        icon: const Icon(Icons.credit_card_rounded, size: 16),
+                        label: const Text('Pay Invoice Now'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.primaryColor,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                      ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFeedbackForm(BuildContext context, UserModel parentUser) {
+    final feedbackProvider = Provider.of<FeedbackProvider>(context);
+
+    return GlassCard(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildRatingStars('Driver Rating', _driverRating, (val) {
+            setState(() {
+              _driverRating = val;
+            });
+          }),
+          const SizedBox(height: 12),
+          _buildRatingStars('Safety Rating', _safetyRating, (val) {
+            setState(() {
+              _safetyRating = val;
+            });
+          }),
+          const SizedBox(height: 12),
+          _buildRatingStars('Punctuality Rating', _punctualityRating, (val) {
+            setState(() {
+              _punctualityRating = val;
+            });
+          }),
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white.withOpacity(0.06), width: 1),
+            ),
+            child: TextField(
+              controller: _feedbackCommentsController,
+              maxLines: 3,
+              style: const TextStyle(color: Colors.white, fontSize: 14),
+              decoration: const InputDecoration(
+                hintText: 'Leave comments or suggestions...',
+                hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          feedbackProvider.isLoading
+              ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
+              : ElevatedButton.icon(
+                  onPressed: () async {
+                    final success = await feedbackProvider.submitFeedback(
+                      userId: parentUser.id,
+                      userName: parentUser.name,
+                      driverRating: _driverRating,
+                      safetyRating: _safetyRating,
+                      punctualityRating: _punctualityRating,
+                      comments: _feedbackCommentsController.text,
+                    );
+                    if (success && context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('Feedback submitted successfully! Thank you.'),
+                          backgroundColor: AppTheme.success,
+                        ),
+                      );
+                      setState(() {
+                        _driverRating = 5;
+                        _safetyRating = 5;
+                        _punctualityRating = 5;
+                        _feedbackCommentsController.clear();
+                      });
+                    }
+                  },
+                  icon: const Icon(Icons.send_rounded, size: 16),
+                  label: const Text('Submit Feedback'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryColor,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRatingStars(String label, int currentRating, Function(int) onRatingSelected) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(fontSize: 13, color: AppTheme.textSecondary, fontWeight: FontWeight.w500),
+        ),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: List.generate(5, (index) {
+            final starVal = index + 1;
+            return IconButton(
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              icon: Icon(
+                starVal <= currentRating ? Icons.star_rounded : Icons.star_border_rounded,
+                color: Colors.amber,
+                size: 24,
+              ),
+              onPressed: () => onRatingSelected(starVal),
+            );
+          }),
+        ),
+      ],
+    );
   }
 }
