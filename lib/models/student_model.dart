@@ -20,6 +20,10 @@ class StudentModel {
   final String parentPhone;
   final String pickupPoint;
   final String dropPoint;
+  final double? pickupLatitude;
+  final double? pickupLongitude;
+  final double? dropLatitude;
+  final double? dropLongitude;
 
   StudentModel({
     required this.id,
@@ -36,6 +40,10 @@ class StudentModel {
     this.parentPhone = '',
     this.pickupPoint = '',
     this.dropPoint = '',
+    this.pickupLatitude,
+    this.pickupLongitude,
+    this.dropLatitude,
+    this.dropLongitude,
   });
 
   factory StudentModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -54,6 +62,10 @@ class StudentModel {
       parentPhone: json['parentPhone'] ?? '',
       pickupPoint: json['pickupPoint'] ?? '',
       dropPoint: json['dropPoint'] ?? '',
+      pickupLatitude: (json['pickupLatitude'] as num?)?.toDouble(),
+      pickupLongitude: (json['pickupLongitude'] as num?)?.toDouble(),
+      dropLatitude: (json['dropLatitude'] as num?)?.toDouble(),
+      dropLongitude: (json['dropLongitude'] as num?)?.toDouble(),
     );
   }
 
@@ -72,6 +84,10 @@ class StudentModel {
       'parentPhone': parentPhone,
       'pickupPoint': pickupPoint,
       'dropPoint': dropPoint,
+      'pickupLatitude': pickupLatitude,
+      'pickupLongitude': pickupLongitude,
+      'dropLatitude': dropLatitude,
+      'dropLongitude': dropLongitude,
     };
   }
 
@@ -99,6 +115,10 @@ class StudentModel {
     String? parentPhone,
     String? pickupPoint,
     String? dropPoint,
+    double? pickupLatitude,
+    double? pickupLongitude,
+    double? dropLatitude,
+    double? dropLongitude,
   }) {
     return StudentModel(
       id: id ?? this.id,
@@ -115,6 +135,10 @@ class StudentModel {
       parentPhone: parentPhone ?? this.parentPhone,
       pickupPoint: pickupPoint ?? this.pickupPoint,
       dropPoint: dropPoint ?? this.dropPoint,
+      pickupLatitude: pickupLatitude ?? this.pickupLatitude,
+      pickupLongitude: pickupLongitude ?? this.pickupLongitude,
+      dropLatitude: dropLatitude ?? this.dropLatitude,
+      dropLongitude: dropLongitude ?? this.dropLongitude,
     );
   }
 }

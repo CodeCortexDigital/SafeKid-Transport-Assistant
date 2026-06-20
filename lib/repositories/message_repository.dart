@@ -13,4 +13,8 @@ class MessageRepository {
   Stream<List<MessageModel>> watchChat(String senderId, String receiverId) {
     return _firestoreService.streamMessages(senderId, receiverId);
   }
+
+  Future<void> markAsRead(String senderId, String receiverId) async {
+    await _firestoreService.markMessagesAsRead(senderId, receiverId);
+  }
 }

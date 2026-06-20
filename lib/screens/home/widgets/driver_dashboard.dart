@@ -1,7 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 import '../../../providers/app_state_provider.dart';
 import '../../../providers/location_provider.dart';
 import '../../../providers/attendance_provider.dart';
@@ -136,7 +134,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   icon: Icons.qr_code_scanner_rounded,
                   color: AppTheme.accentColor,
                   width: actionWidth,
-                  onTap: () => _openScanner(context),
+                  onTap: () => Navigator.pushNamed(context, '/qr-scanner'),
                 ),
                 _buildActionCard(
                   title: 'Messages',
@@ -709,176 +707,5 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
-  // --- ACTIONS: SCANNER OPENER ---
-  void _openScanner(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: AppTheme.backgroundColor,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          maxChildSize: 0.95,
-          minChildSize: 0.5,
-          expand: false,
-          builder: (context, scrollController) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const SizedBox(height: 12),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Scan Boarding Badge',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                    child: _buildScannerCamera(context),
-                  ),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
 
-  Widget _buildScannerCamera(BuildContext context) {
-    final attendance = Provider.of<AttendanceProvider>(context, listen: false);
-    bool hasScanned = false;
-
-    if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS) {
-      return Container(
-        color: AppTheme.surfaceColor,
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.videocam_off_outlined, size: 64, color: AppTheme.textMuted),
-            const SizedBox(height: 16),
-            const Text(
-              'Camera Scanner Unavailable',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-            ),
-            const Text(
-              'Choose a student code manually to simulate boarding check:',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await attendance.scanQrCode('STUDENT_EMMA_DOE_123', StudentStatus.atSchool);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(attendance.successMessage ?? 'Success')),
-                        );
-                      }
-                    },
-                    child: const Text('Check-In Emma (School)'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await attendance.scanQrCode('STUDENT_EMMA_DOE_123', StudentStatus.inTransit);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(attendance.successMessage ?? 'Success')),
-                        );
-                      }
-                    },
-                    child: const Text('Board Emma (Transit)'),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      await attendance.scanQrCode('STUDENT_LIAM_DOE_456', StudentStatus.inTransit);
-                      if (context.mounted) {
-                        Navigator.pop(context);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(attendance.successMessage ?? 'Success')),
-                        );
-                      }
-                    },
-                    child: const Text('Board Liam (Transit)'),
-                  ),
-                ),
-              ],
-            )
-          ],
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        MobileScanner(
-          onDetect: (capture) async {
-            if (hasScanned) return;
-            final List<Barcode> barcodes = capture.barcodes;
-            for (final barcode in barcodes) {
-              if (barcode.rawValue != null) {
-                hasScanned = true;
-                final success = await attendance.scanQrCode(
-                  barcode.rawValue!, 
-                  StudentStatus.inTransit
-                );
-                
-                if (context.mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(success ? (attendance.successMessage ?? 'Logged') : (attendance.errorMessage ?? 'Error')),
-                      backgroundColor: success ? AppTheme.success : AppTheme.error,
-                    ),
-                  );
-                }
-                break;
-              }
-            }
-          },
-        ),
-        Center(
-          child: Container(
-            width: 250,
-            height: 250,
-            decoration: BoxDecoration(
-              border: Border.all(color: AppTheme.accentLight, width: 2.5),
-              borderRadius: BorderRadius.circular(20),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }

@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'services/firebase/notification_service.dart';
+import 'widgets/in_app_notification_toast.dart';
+import 'dart:async';
 import 'core/constants/app_constants.dart';
 import 'core/theme/app_theme.dart';
 import 'providers/app_state_provider.dart';
@@ -13,9 +18,18 @@ import 'screens/auth/profile_setup_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/student_management/student_management_screen.dart';
 import 'screens/student_management/qr_card_screen.dart';
+import 'screens/student_management/qr_scanner_screen.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp();
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  } catch (_) {}
   runApp(
     ChangeNotifierProvider(
       create: (_) => AppStateProvider(),
@@ -61,12 +75,14 @@ class SafeKidApp extends StatelessWidget {
             debugShowCheckedModeBanner: false,
             theme: AppTheme.darkTheme,
             initialRoute: AppConstants.routeSplash,
+            builder: (context, child) => NotificationOverlayWrapper(child: child),
             routes: {
               AppConstants.routeSplash: (context) => const SplashScreen(),
               AppConstants.routeLogin: (context) => const LoginScreen(),
               AppConstants.routeHome: (context) => const HomeScreen(),
               AppConstants.routeStudentManagement: (context) => const StudentManagementScreen(),
               AppConstants.routeQrCard: (context) => const QrCardScreen(),
+              AppConstants.routeQrScanner: (context) => const QrScannerScreen(),
               '/otp': (context) => const OtpScreen(),
               '/profile-setup': (context) => const ProfileSetupScreen(),
             },
@@ -74,5 +90,38 @@ class SafeKidApp extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+class NotificationOverlayWrapper extends StatefulWidget {
+  final Widget? child;
+  const NotificationOverlayWrapper({super.key, this.child});
+
+  @override
+  State<NotificationOverlayWrapper> createState() => _NotificationOverlayWrapperState();
+}
+
+class _NotificationOverlayWrapperState extends State<NotificationOverlayWrapper> {
+  StreamSubscription? _subscription;
+
+  @override
+  void initState() {
+    super.initState();
+    _subscription = NotificationService().notificationsStream.listen((notification) {
+      if (mounted) {
+        InAppNotificationToast.show(context, notification);
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _subscription?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return widget.child ?? const SizedBox();
   }
 }

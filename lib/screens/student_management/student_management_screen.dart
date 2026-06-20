@@ -5,6 +5,7 @@ import '../../models/student_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/custom_text_field.dart';
+import '../../core/constants/app_constants.dart';
 
 class StudentManagementScreen extends StatefulWidget {
   const StudentManagementScreen({super.key});
@@ -410,6 +411,10 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                     parentPhone: parentPhoneController.text.trim(),
                     pickupPoint: pickupController.text.trim(),
                     dropPoint: dropController.text.trim(),
+                    pickupLatitude: student?.pickupLatitude ?? AppConstants.defaultHomeLatitude,
+                    pickupLongitude: student?.pickupLongitude ?? AppConstants.defaultHomeLongitude,
+                    dropLatitude: student?.dropLatitude ?? AppConstants.defaultHomeLatitude,
+                    dropLongitude: student?.dropLongitude ?? AppConstants.defaultHomeLongitude,
                     lastCheckIn: student?.lastCheckIn,
                     lastCheckOut: student?.lastCheckOut,
                   );

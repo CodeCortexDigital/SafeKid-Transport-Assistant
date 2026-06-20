@@ -10,6 +10,7 @@ import '../../models/feedback_model.dart';
 import '../../models/billing_model.dart';
 import '../../core/errors/failures.dart';
 import '../../core/constants/app_constants.dart';
+import 'notification_service.dart';
 
 abstract class FirestoreService {
   // Users
@@ -44,6 +45,8 @@ abstract class FirestoreService {
   // Messages
   Future<void> sendMessage(MessageModel message);
   Stream<List<MessageModel>> streamMessages(String senderId, String receiverId);
+  Future<List<UserModel>> getChatPartners(String currentUserId, UserRole role);
+  Future<void> markMessagesAsRead(String senderId, String receiverId);
 
   // Feedback
   Future<void> submitFeedback(FeedbackModel feedback);
@@ -118,11 +121,16 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateStudentStatus(String studentId, StudentStatus status) async {
     try {
+      final student = await getStudent(studentId);
+      final oldStatus = student.status;
+
       await _firestore.collection(AppConstants.studentsCollection).doc(studentId).update({
         'status': status.name,
         if (status == StudentStatus.atSchool) 'lastCheckIn': DateTime.now().toIso8601String(),
         if (status == StudentStatus.home) 'lastCheckOut': DateTime.now().toIso8601String(),
       });
+
+      _dispatchStudentStatusNotification(student.name, studentId, oldStatus, status);
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -303,6 +311,95 @@ class FirebaseFirestoreService implements FirestoreService {
   }
 
   @override
+  Future<List<UserModel>> getChatPartners(String currentUserId, UserRole role) async {
+    try {
+      if (role == UserRole.parent) {
+        final students = await getStudentsForParent(currentUserId);
+        final driverIds = <String>{};
+        
+        final tripsSnap = await _firestore.collection('trips').get();
+        for (var doc in tripsSnap.docs) {
+          final trip = TripModel.fromJson(doc.data(), doc.id);
+          final intersection = trip.studentIds.toSet().intersection(students.map((s) => s.id).toSet());
+          if (intersection.isNotEmpty && trip.driverId.isNotEmpty) {
+            driverIds.add(trip.driverId);
+          }
+        }
+
+        if (driverIds.isEmpty) {
+          final driversSnap = await _firestore
+              .collection(AppConstants.usersCollection)
+              .where('role', isEqualTo: UserRole.driver.name)
+              .get();
+          return driversSnap.docs.map((doc) => UserModel.fromJson(doc.data(), doc.id)).toList();
+        }
+
+        final List<UserModel> partners = [];
+        for (var dId in driverIds) {
+          final profile = await getUserProfile(dId);
+          if (profile != null) partners.add(profile);
+        }
+        return partners;
+      } else {
+        final tripsSnap = await _firestore
+            .collection('trips')
+            .where('driverId', isEqualTo: currentUserId)
+            .get();
+        
+        final parentIds = <String>{};
+        for (var doc in tripsSnap.docs) {
+          final trip = TripModel.fromJson(doc.data(), doc.id);
+          for (var sId in trip.studentIds) {
+            try {
+              final student = await getStudent(sId);
+              if (student.parentUid.isNotEmpty) {
+                parentIds.add(student.parentUid);
+              }
+            } catch (_) {}
+          }
+        }
+
+        if (parentIds.isEmpty) {
+          final parentsSnap = await _firestore
+              .collection(AppConstants.usersCollection)
+              .where('role', isEqualTo: UserRole.parent.name)
+              .get();
+          return parentsSnap.docs.map((doc) => UserModel.fromJson(doc.data(), doc.id)).toList();
+        }
+
+        final List<UserModel> partners = [];
+        for (var pId in parentIds) {
+          final profile = await getUserProfile(pId);
+          if (profile != null) partners.add(profile);
+        }
+        return partners;
+      }
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> markMessagesAsRead(String senderId, String receiverId) async {
+    try {
+      final snap = await _firestore
+          .collection('messages')
+          .where('senderId', isEqualTo: senderId)
+          .where('receiverId', isEqualTo: receiverId)
+          .where('isRead', isEqualTo: false)
+          .get();
+          
+      final batch = _firestore.batch();
+      for (var doc in snap.docs) {
+        batch.update(doc.reference, {'isRead': true});
+      }
+      await batch.commit();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
   Future<void> submitFeedback(FeedbackModel feedback) async {
     try {
       await _firestore.collection('feedback').doc(feedback.id).set(feedback.toJson());
@@ -382,6 +479,10 @@ class MockFirestoreService implements FirestoreService {
       parentPhone: '+15551111111',
       pickupPoint: '74th St & Madison Ave',
       dropPoint: '82nd St & Lex Ave',
+      pickupLatitude: 40.770000,
+      pickupLongitude: -73.978000,
+      dropLatitude: 40.770000,
+      dropLongitude: -73.978000,
     );
     _students['mock-student-2'] = StudentModel(
       id: 'mock-student-2',
@@ -396,6 +497,10 @@ class MockFirestoreService implements FirestoreService {
       parentPhone: '+15551111111',
       pickupPoint: '74th St & Madison Ave',
       dropPoint: '82nd St & Lex Ave',
+      pickupLatitude: 40.778000,
+      pickupLongitude: -73.972000,
+      dropLatitude: 40.778000,
+      dropLongitude: -73.972000,
     );
 
     // Vehicles
@@ -500,13 +605,18 @@ class MockFirestoreService implements FirestoreService {
     await Future.delayed(const Duration(milliseconds: 200));
     if (!_students.containsKey(studentId)) return;
     
-    final updated = _students[studentId]!.copyWith(
+    final student = _students[studentId]!;
+    final oldStatus = student.status;
+
+    final updated = student.copyWith(
       status: status,
-      lastCheckIn: status == StudentStatus.atSchool ? DateTime.now() : _students[studentId]!.lastCheckIn,
-      lastCheckOut: status == StudentStatus.home ? DateTime.now() : _students[studentId]!.lastCheckOut,
+      lastCheckIn: status == StudentStatus.atSchool ? DateTime.now() : student.lastCheckIn,
+      lastCheckOut: status == StudentStatus.home ? DateTime.now() : student.lastCheckOut,
     );
     _students[studentId] = updated;
     _studentStreamControllers[studentId]?.add(updated);
+
+    _dispatchStudentStatusNotification(student.name, studentId, oldStatus, status);
   }
 
   @override
@@ -727,6 +837,33 @@ class MockFirestoreService implements FirestoreService {
   }
 
   @override
+  Future<List<UserModel>> getChatPartners(String currentUserId, UserRole role) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (role == UserRole.parent) {
+      return _users.values.where((u) => u.role == UserRole.driver).toList();
+    } else {
+      return _users.values.where((u) => u.role == UserRole.parent).toList();
+    }
+  }
+
+  @override
+  Future<void> markMessagesAsRead(String senderId, String receiverId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    
+    bool changed = false;
+    _messages.forEach((key, message) {
+      if (message.senderId == senderId && message.receiverId == receiverId && !message.isRead) {
+        _messages[key] = message.copyWith(isRead: true);
+        changed = true;
+      }
+    });
+
+    if (changed) {
+      _notifyMessagesUpdate(senderId, receiverId);
+    }
+  }
+
+  @override
   Future<void> submitFeedback(FeedbackModel feed) async {
     await Future.delayed(const Duration(milliseconds: 300));
     _feedback[feed.id] = feed;
@@ -748,4 +885,39 @@ class MockFirestoreService implements FirestoreService {
     controller.add(initialList);
     return controller.stream;
   }
+}
+
+/// Helper function to dispatch student transit notifications dynamically
+void _dispatchStudentStatusNotification(
+  String studentName,
+  String studentId,
+  StudentStatus oldStatus,
+  StudentStatus newStatus,
+) {
+  if (oldStatus == newStatus) return;
+
+  String title = 'SafeKid Transit Alert';
+  String body = '$studentName status updated to ${newStatus.name}.';
+
+  if (newStatus == StudentStatus.inTransit) {
+    if (oldStatus == StudentStatus.home) {
+      title = '🚌 $studentName Picked Up';
+      body = '$studentName has boarded the school van. En route to school.';
+    } else if (oldStatus == StudentStatus.atSchool) {
+      title = '🚌 $studentName Started Return Trip';
+      body = '$studentName has boarded the van home. En route to drop point.';
+    }
+  } else if (newStatus == StudentStatus.atSchool) {
+    title = '🏫 $studentName Reached School';
+    body = '$studentName has arrived safely at school and checked in.';
+  } else if (newStatus == StudentStatus.home) {
+    title = '🏠 $studentName Dropped Home';
+    body = '$studentName has arrived safely at home and checked out.';
+  }
+
+  NotificationService().triggerNotification(
+    title: title,
+    body: body,
+    studentId: studentId,
+  );
 }
