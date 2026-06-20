@@ -1,0 +1,481 @@
+
+# Prompt 2 — Firebase Authentication
+
+```text
+Implement Firebase Authentication.
+
+Requirements:
+
+- Phone OTP Login
+- User Registration
+- Persistent Login
+- Logout
+
+Roles:
+
+- Driver
+- Parent
+- Assistant
+
+Firestore collection:
+
+users
+
+Fields:
+id
+name
+phone
+role
+createdAt
+
+Create:
+
+- Login Screen
+- OTP Verification Screen
+- Profile Setup Screen
+
+Redirect users according to role.
+
+Generate complete code.
+```
+
+---
+
+# Prompt 3 — Firestore Database Models
+
+```text
+Create Firestore models and repositories.
+
+Collections:
+
+users
+students
+vehicles
+trips
+scan_logs
+messages
+feedback
+billing
+
+Generate:
+
+- Dart Models
+- fromJson()
+- toJson()
+- Repository classes
+- Firestore services
+
+Use null safety and best practices.
+```
+
+---
+
+# Prompt 4 — Driver Dashboard
+
+```text
+Create Driver Dashboard.
+
+Show:
+
+- Total Students
+- Today's Pickups
+- Pending Pickups
+- Total Parents
+
+Quick Actions:
+
+- Add Student
+- Start Trip
+- QR Scanner
+- Messages
+- Billing
+- Reports
+
+Use modern cards and dashboard layout.
+
+Generate production-ready Flutter UI.
+```
+
+---
+
+# Prompt 5 — Student Management Module
+
+```text
+Create Student Management Module.
+
+Features:
+
+- Student List
+- Add Student
+- Edit Student
+- Delete Student
+
+Fields:
+
+Student Name
+Parent Name
+Parent Phone
+Pickup Point
+Drop Point
+School Name
+
+Store data in Firestore.
+
+Use Provider state management.
+
+Generate complete code.
+```
+
+---
+
+# Prompt 6 — QR Generation
+
+```text
+Implement QR Generation.
+
+Requirements:
+
+Generate unique QR for each student.
+
+QR data:
+
+studentId
+studentName
+
+Create:
+
+- QR Card Screen
+- Share QR
+- Save QR as image
+
+Use qr_flutter package.
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 7 — QR Scanner Module
+
+```text
+Create QR Scanner Module.
+
+Requirements:
+
+Use mobile_scanner.
+
+When QR scanned:
+
+Fetch student record.
+
+Record event in Firestore.
+
+Event Types:
+
+Pickup
+School Arrival
+School Departure
+Home Drop
+
+Store:
+
+StudentId
+TripId
+Timestamp
+Latitude
+Longitude
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 8 — Parent Dashboard
+
+```text
+Create Parent Dashboard.
+
+Show:
+
+Student Name
+Current Status
+Pickup Time
+School Arrival Time
+Drop Time
+
+Status Timeline:
+
+Waiting
+Picked Up
+Reached School
+Returned
+Dropped Home
+
+Create modern UI.
+
+Fetch real-time Firestore updates.
+```
+
+---
+
+# Prompt 9 — Live GPS Tracking
+
+```text
+Implement live GPS tracking.
+
+Driver app shares location every 10 seconds.
+
+Store location in Firestore.
+
+Parent dashboard shows:
+
+- Driver location
+- Google Map
+- Distance from child pickup point
+
+Use geolocator and google_maps_flutter.
+
+Generate complete code.
+```
+
+---
+
+# Prompt 10 — ETA Prediction
+
+```text
+Implement ETA calculation.
+
+Inputs:
+
+Current Van Location
+Pickup Location
+
+Calculate:
+
+Distance
+Estimated Arrival Time
+
+Display:
+
+Van arriving in X minutes
+
+Update in real time.
+
+Generate production-ready code.
+```
+
+---
+
+# Prompt 11 — Push Notifications
+
+```text
+Implement Firebase Cloud Messaging.
+
+Send notifications when:
+
+Student Picked Up
+Reached School
+Started Return Trip
+Dropped Home
+
+Create notification service.
+
+Handle:
+
+Foreground
+Background
+Terminated app
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 12 — Messaging Module
+
+```text
+Create real-time chat module.
+
+Roles:
+
+Driver
+Parent
+
+Features:
+
+Conversation List
+Chat Screen
+Send Message
+Read Status
+Timestamps
+
+Store messages in Firestore.
+
+Generate production-ready code.
+```
+
+---
+
+# Prompt 13 — Billing Module
+
+```text
+Create Billing Module.
+
+Features:
+
+Monthly Fee
+Paid Status
+Pending Status
+Due Date
+
+Driver Dashboard:
+
+Total Fees
+Collected
+Pending
+
+Parent Dashboard:
+
+Current Month Fee
+Payment Status
+
+Store in Firestore.
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 14 — Feedback Module
+
+```text
+Create Feedback Module.
+
+Parents can:
+
+Rate Driver
+Rate Safety
+Rate Punctuality
+Leave Comments
+
+Driver Dashboard:
+
+Average Rating
+Recent Feedback
+
+Store in Firestore.
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 15 — AI Chatbot
+
+```text
+Create SafeKid Assistant Chatbot.
+
+Answer:
+
+Where is my van?
+Has my child been picked up?
+Has my child reached school?
+What is my fee status?
+What are school timings?
+
+Use Firestore data.
+
+Create chatbot screen.
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 16 — AI Notification Generator
+
+```text
+Create AI Notification Generator.
+
+Templates:
+
+Van Delay
+Fee Reminder
+Holiday Notice
+Student Absent
+Emergency Alert
+
+Generate professional messages automatically.
+
+Create reusable service.
+
+Generate complete code.
+```
+
+---
+
+# Prompt 17 — Driver Performance Score
+
+```text
+Create Driver Performance Engine.
+
+Inputs:
+
+Average Rating
+Pickup Timeliness
+Attendance Completion
+Parent Feedback
+
+Calculate score from 0-100.
+
+Display:
+
+Safety Score
+Performance Score
+
+Create dashboard widgets.
+
+Generate complete implementation.
+```
+
+---
+
+# Prompt 18 — Testing & Optimization
+
+```text
+Review entire SafeKid Transport Assistant project.
+
+Tasks:
+
+Find bugs
+Improve architecture
+Optimize Firestore queries
+Improve state management
+Improve UI consistency
+Improve security rules
+Improve Firebase performance
+
+Generate detailed improvements and code fixes.
+```
+
+# Recommended AI Workflow
+
+For each prompt:
+
+1. Generate code.
+2. Run the app.
+3. Fix compilation errors.
+4. Commit to Git.
+5. Move to the next prompt.
+
+Use a Git workflow like:
+
+```bash
+git checkout -b auth-module
+git commit -m "Authentication completed"
+
+git checkout -b student-module
+git commit -m "Student management completed"
+```
+
+This way, if an AI tool breaks something, you can roll back to the last working module instead of rebuilding the entire project.
