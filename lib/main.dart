@@ -8,6 +8,8 @@ import 'providers/location_provider.dart';
 import 'providers/attendance_provider.dart';
 import 'screens/splash/splash_screen.dart';
 import 'screens/auth/login_screen.dart';
+import 'screens/auth/otp_screen.dart';
+import 'screens/auth/profile_setup_screen.dart';
 import 'screens/home/home_screen.dart';
 
 void main() {
@@ -61,6 +63,8 @@ class SafeKidApp extends StatelessWidget {
               AppConstants.routeSplash: (context) => const SplashScreen(),
               AppConstants.routeLogin: (context) => const LoginScreen(),
               AppConstants.routeHome: (context) => const HomeScreen(),
+              '/otp': (context) => const OtpScreen(),
+              '/profile-setup': (context) => const ProfileSetupScreen(),
             },
           ),
         );

@@ -30,9 +30,14 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user != null) {
-        // Load student data linked to user
         final attendance = Provider.of<AttendanceProvider>(context, listen: false);
-        attendance.fetchMyStudents(user.uid);
+        // Load default students for parent or general boarding verification
+        if (user.role == UserRole.parent) {
+          attendance.fetchMyStudents(user.id);
+        } else {
+          // For driver/assistant: load mock route boarding students
+          attendance.fetchMyStudents('mock-parent-uid-123');
+        }
       }
     });
   }
@@ -77,7 +82,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
-          // Database Status Badge
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
             margin: const EdgeInsets.only(right: 8),
@@ -138,8 +142,10 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 20),
           if (user.role == UserRole.parent) ...[
             _buildParentDashboard(context),
-          ] else ...[
+          ] else if (user.role == UserRole.driver) ...[
             _buildDriverDashboard(context),
+          ] else ...[
+            _buildAssistantDashboard(context),
           ],
         ],
       ),
@@ -151,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Left Column (Controls & Lists)
         Expanded(
           flex: 4,
           child: SingleChildScrollView(
@@ -163,16 +168,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 24),
                 if (user.role == UserRole.parent) ...[
                   _buildChildrenListSection(context),
-                ] else ...[
+                ] else if (user.role == UserRole.driver) ...[
                   _buildDriverControlSection(context),
+                ] else ...[
+                  _buildAssistantControlSection(context),
                 ],
               ],
             ),
           ),
         ),
-        // Vertical Divider
         VerticalDivider(color: Colors.white.withOpacity(0.08), width: 1),
-        // Right Column (Map / Tracking Console)
         Expanded(
           flex: 6,
           child: Padding(
@@ -199,8 +204,11 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- WELCOME CARD ---
   Widget _buildWelcomeHeader(UserModel user) {
+    String subtitle = 'Parent Profile';
+    if (user.role == UserRole.driver) subtitle = 'Bus Driver Profile';
+    if (user.role == UserRole.assistant) subtitle = 'Transit Assistant Profile';
+
     return GlassCard(
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -209,7 +217,7 @@ class _HomeScreenState extends State<HomeScreen> {
             radius: 28,
             backgroundColor: AppTheme.primaryColor.withOpacity(0.2),
             child: Text(
-              user.name.substring(0, 1).toUpperCase(),
+              user.name.isNotEmpty ? user.name.substring(0, 1).toUpperCase() : '?',
               style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: AppTheme.primaryLight),
             ),
           ),
@@ -219,14 +227,12 @@ class _HomeScreenState extends State<HomeScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Hello, ${user.name}',
+                  user.name.isNotEmpty ? 'Hello, ${user.name}' : 'Welcome to SafeKid',
                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  user.role == UserRole.parent
-                      ? 'Parent Profile • Greenwood District'
-                      : 'Bus Driver Profile • Greenwood School Bus 4B',
+                  '$subtitle • ${user.phone}',
                   style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                 ),
               ],
@@ -237,7 +243,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- PARENT VIEWS ---
+  // --- PARENT VIEW ---
   Widget _buildParentDashboard(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -246,6 +252,52 @@ class _HomeScreenState extends State<HomeScreen> {
         const SizedBox(height: 20),
         const Text(
           'Live Tracking Tracker',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 300,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: _buildTrackingMap(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- DRIVER VIEW ---
+  Widget _buildDriverDashboard(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildDriverControlSection(context),
+        const SizedBox(height: 20),
+        const Text(
+          'Active Route GPS',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 300,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: _buildTrackingMap(context),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // --- ASSISTANT VIEW ---
+  Widget _buildAssistantDashboard(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildAssistantControlSection(context),
+        const SizedBox(height: 20),
+        const Text(
+          'Active Route GPS',
           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
         const SizedBox(height: 12),
@@ -270,12 +322,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (attendance.myStudents.isEmpty) {
-      return const GlassCard(
-        child: Center(child: Text('No registered children associated with this profile.')),
-      );
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -289,7 +335,7 @@ class _HomeScreenState extends State<HomeScreen> {
             IconButton(
               icon: const Icon(Icons.refresh, color: AppTheme.primaryLight, size: 20),
               onPressed: () {
-                final uid = Provider.of<AuthProvider>(context, listen: false).user?.uid;
+                final uid = Provider.of<AuthProvider>(context, listen: false).user?.id;
                 if (uid != null) attendance.fetchMyStudents(uid);
               },
             ),
@@ -313,7 +359,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildStudentCard(BuildContext context, StudentModel student) {
     final locationProv = Provider.of<LocationProvider>(context);
 
-    // Color and Icon based on student safety status
     Color statusColor;
     IconData statusIcon;
     String statusText;
@@ -369,7 +414,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                // Status badge
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
@@ -387,7 +431,6 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                // QR Button
                 TextButton.icon(
                   onPressed: () => _showQrDialog(context, student),
                   icon: const Icon(Icons.qr_code_2_rounded, size: 18),
@@ -395,11 +438,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   style: TextButton.styleFrom(foregroundColor: AppTheme.accentLight),
                 ),
                 const SizedBox(width: 8),
-                // Live track button
                 ElevatedButton.icon(
                   onPressed: student.status == StudentStatus.inTransit
                       ? () {
-                          // Start listening to the mock ride route
                           locationProv.startTrackingRide('mock-ride-1');
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -428,29 +469,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- DRIVER VIEWS ---
-  Widget _buildDriverDashboard(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildDriverControlSection(context),
-        const SizedBox(height: 20),
-        const Text(
-          'Active Route GPS',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 300,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: _buildTrackingMap(context),
-          ),
-        ),
-      ],
-    );
-  }
-
+  // --- DRIVER CONTROLS ---
   Widget _buildDriverControlSection(BuildContext context) {
     final locationProv = Provider.of<LocationProvider>(context);
 
@@ -504,7 +523,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 },
               ),
               const SizedBox(height: 12),
-              // Scanner button
               OutlinedButton.icon(
                 onPressed: () => _openScanner(context),
                 icon: const Icon(Icons.qr_code_scanner_rounded),
@@ -520,7 +538,82 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- QR GENERATION POPUP ---
+  // --- ASSISTANT CONTROLS ---
+  Widget _buildAssistantControlSection(BuildContext context) {
+    final attendance = Provider.of<AttendanceProvider>(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const Text(
+          'Assistant Console',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+        ),
+        const SizedBox(height: 10),
+        GlassCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Boarding Assistance',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      ),
+                      const Text(
+                        'Role: Transit Staff',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      )
+                    ],
+                  ),
+                  const Icon(
+                    Icons.assignment_ind_outlined,
+                    color: AppTheme.accentLight,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              CustomButton(
+                text: 'Scan Boarding QR Code',
+                icon: Icons.qr_code_scanner_rounded,
+                onPressed: () => _openScanner(context),
+              ),
+              const SizedBox(height: 20),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildStatItem('Boarded', '${attendance.myStudents.where((s) => s.status == StudentStatus.inTransit).length}'),
+                  _buildStatItem('At School', '${attendance.myStudents.where((s) => s.status == StudentStatus.atSchool).length}'),
+                  _buildStatItem('At Home', '${attendance.myStudents.where((s) => s.status == StudentStatus.home).length}'),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppTheme.primaryLight),
+        ),
+        Text(
+          label,
+          style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+        ),
+      ],
+    );
+  }
+
+  // --- QR DIALOG ---
   void _showQrDialog(BuildContext context, StudentModel student) {
     showDialog(
       context: context,
@@ -576,7 +669,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // --- QR SCANNING SHEET ---
+  // --- SCANNER MODAL SHEET ---
   void _openScanner(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -608,7 +701,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Scan Student Safety Code',
+                  'Scan Boarding Badge',
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
@@ -629,9 +722,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildScannerCamera(BuildContext context) {
     final attendance = Provider.of<AttendanceProvider>(context, listen: false);
-    bool hasScanned = false; // Prevent multiple triggers in milliseconds
+    bool hasScanned = false;
 
-    // Because mobile scanner might not initialize on desktop/simulators, we offer an interactive manual fallback
     if (kIsWeb || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS) {
       return Container(
         color: AppTheme.surfaceColor,
@@ -646,7 +738,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
             ),
             const Text(
-              'Scanner hardware is only active on Android/iOS/Web. Choose a mock student to trigger check status manually:',
+              'Choose a student code manually to simulate boarding check:',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
             ),
@@ -671,7 +763,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () async {
-                      await attendance.scanQrCode('STUDENT_EMMA_DOE_123', StudentStatus.home);
+                      await attendance.scanQrCode('STUDENT_EMMA_DOE_123', StudentStatus.inTransit);
                       if (context.mounted) {
                         Navigator.pop(context);
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -679,7 +771,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       }
                     },
-                    child: const Text('Check-Out Emma (Home)'),
+                    child: const Text('Board Emma (Transit)'),
                   ),
                 ),
               ],
@@ -698,7 +790,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         );
                       }
                     },
-                    child: const Text('Check Liam in Transit'),
+                    child: const Text('Board Liam (Transit)'),
                   ),
                 ),
               ],
@@ -719,7 +811,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 hasScanned = true;
                 final success = await attendance.scanQrCode(
                   barcode.rawValue!, 
-                  StudentStatus.inTransit // Default status when scan happens on the bus
+                  StudentStatus.inTransit
                 );
                 
                 if (context.mounted) {
@@ -746,16 +838,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
         ),
-        const Positioned(
-          bottom: 40,
-          left: 0,
-          right: 0,
-          child: Text(
-            'Align student QR code inside the box.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, shadows: [Shadow(color: Colors.black, blurRadius: 10)]),
-          ),
-        )
       ],
     );
   }
@@ -767,7 +849,6 @@ class _HomeScreenState extends State<HomeScreen> {
         final ride = locationProv.currentRide;
         final isSharing = locationProv.isSharingLocation;
 
-        // Custom High-fidelity Schematic Map Simulator for non-mobile or demo environments
         return Container(
           color: AppTheme.backgroundColor,
           child: CustomPaint(
@@ -816,10 +897,8 @@ class MapSchemaPainter extends CustomPainter {
       ..color = AppTheme.surfaceColor
       ..style = PaintingStyle.fill;
     
-    // Draw background board
     canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, 0, size.width, size.height), const Radius.circular(16)), paint);
 
-    // Draw grid paths
     final gridPaint = Paint()
       ..color = Colors.white.withOpacity(0.03)
       ..strokeWidth = 1;
@@ -831,12 +910,9 @@ class MapSchemaPainter extends CustomPainter {
       canvas.drawLine(Offset(0, j), Offset(size.width, j), gridPaint);
     }
 
-    // Scale mapping coordinates to visual offsets
-    // School is top-left, Home is bottom-right
     final Offset schoolOffset = Offset(size.width * 0.25, size.height * 0.25);
     final Offset homeOffset = Offset(size.width * 0.75, size.height * 0.75);
 
-    // Draw connecting highway route line
     final routePaint = Paint()
       ..color = Colors.white.withOpacity(0.08)
       ..strokeWidth = 6
@@ -845,7 +921,6 @@ class MapSchemaPainter extends CustomPainter {
     
     final Path path = Path();
     path.moveTo(schoolOffset.dx, schoolOffset.dy);
-    // Add custom curve representing winding roads
     path.quadraticBezierTo(
       size.width * 0.35, size.height * 0.65, 
       size.width * 0.5, size.height * 0.5
@@ -856,37 +931,29 @@ class MapSchemaPainter extends CustomPainter {
     );
     canvas.drawPath(path, routePaint);
 
-    // Draw School Node
     final nodePaint = Paint()..style = PaintingStyle.fill;
     nodePaint.color = AppTheme.primaryColor;
     canvas.drawCircle(schoolOffset, 16, nodePaint);
     nodePaint.color = Colors.white;
     canvas.drawCircle(schoolOffset, 6, nodePaint);
 
-    // Draw Home Node
     nodePaint.color = AppTheme.success;
     canvas.drawCircle(homeOffset, 16, nodePaint);
     nodePaint.color = Colors.white;
     canvas.drawCircle(homeOffset, 6, nodePaint);
 
-    // Render labels
     _drawText(canvas, schoolOffset - const Offset(0, 36), 'Greenwood School', Colors.white, 12, FontWeight.bold);
     _drawText(canvas, homeOffset + const Offset(-20, 24), 'Student Safe Zone', Colors.white, 12, FontWeight.bold);
 
-    // Draw simulated bus node if active
     if (busLat != null && busLng != null) {
-      // Calculate bus position along the curve based on Lat/Lng coordinates
-      // Since it's simulated linearly, interpolate:
       double t = (busLat! - schoolLat) / (homeLat - schoolLat);
       if (t < 0) t = 0;
       if (t > 1) t = 1;
 
-      // Follow the Bezier curve calculation matching canvas path
       final double busX = _calculateBezierPosition(schoolOffset.dx, size.width * 0.35, size.width * 0.5, homeOffset.dx, t);
       final double busY = _calculateBezierPosition(schoolOffset.dy, size.height * 0.65, size.height * 0.5, homeOffset.dy, t);
       final Offset busOffset = Offset(busX, busY);
 
-      // Pulse ring animation simulation
       final pulsePaint = Paint()
         ..color = AppTheme.warning.withOpacity(0.2)
         ..style = PaintingStyle.fill;
@@ -897,7 +964,6 @@ class MapSchemaPainter extends CustomPainter {
       nodePaint.color = Colors.black;
       canvas.drawCircle(busOffset, 4, nodePaint);
 
-      // Driver live indicator tag
       final tagRect = Rect.fromLTWH(busOffset.dx - 45, busOffset.dy - 35, 90, 18);
       nodePaint.color = AppTheme.cardColor;
       canvas.drawRRect(RRect.fromRectAndRadius(tagRect, const Radius.circular(4)), nodePaint);
@@ -911,7 +977,6 @@ class MapSchemaPainter extends CustomPainter {
         FontWeight.bold
       );
     } else {
-      // Draw idle state message
       _drawText(
         canvas, 
         Offset(size.width * 0.5 - 110, size.height * 0.5 - 10), 
@@ -924,7 +989,6 @@ class MapSchemaPainter extends CustomPainter {
   }
 
   double _calculateBezierPosition(double p0, double p1, double p2, double p3, double t) {
-    // Cubic bezier formula: (1-t)^3*p0 + 3*(1-t)^2*t*p1 + 3*(1-t)*t^2*p2 + t^3*p3
     final double u = 1 - t;
     return u * u * u * p0 + 3 * u * u * t * p1 + 3 * u * t * t * p2 + t * t * t * p3;
   }

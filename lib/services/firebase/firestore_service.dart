@@ -2,10 +2,14 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart' as fs;
 import '../../models/student_model.dart';
 import '../../models/ride_model.dart';
+import '../../models/user_model.dart';
 import '../../core/errors/failures.dart';
 import '../../core/constants/app_constants.dart';
 
 abstract class FirestoreService {
+  Future<void> createUserProfile(UserModel user);
+  Future<UserModel?> getUserProfile(String uid);
+  
   Future<StudentModel> getStudent(String studentId);
   Stream<StudentModel> streamStudent(String studentId);
   Future<void> updateStudentStatus(String studentId, StudentStatus status);
@@ -19,6 +23,34 @@ abstract class FirestoreService {
 /// Production implementation using Firebase Cloud Firestore
 class FirebaseFirestoreService implements FirestoreService {
   final fs.FirebaseFirestore _firestore = fs.FirebaseFirestore.instance;
+
+  @override
+  Future<void> createUserProfile(UserModel user) async {
+    try {
+      await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(user.id)
+          .set(user.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<UserModel?> getUserProfile(String uid) async {
+    try {
+      final doc = await _firestore
+          .collection(AppConstants.usersCollection)
+          .doc(uid)
+          .get();
+      if (doc.exists && doc.data() != null) {
+        return UserModel.fromJson(doc.data()!, doc.id);
+      }
+      return null;
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
 
   @override
   Future<StudentModel> getStudent(String studentId) async {
@@ -129,11 +161,35 @@ class FirebaseFirestoreService implements FirestoreService {
 class MockFirestoreService implements FirestoreService {
   final Map<String, StudentModel> _students = {};
   final Map<String, RideModel> _rides = {};
+  final Map<String, UserModel> _users = {};
   
   final Map<String, StreamController<StudentModel>> _studentStreamControllers = {};
   final Map<String, StreamController<RideModel>> _rideStreamControllers = {};
 
   MockFirestoreService() {
+    // Populate mock users
+    _users['mock-parent-uid-123'] = UserModel(
+      id: 'mock-parent-uid-123',
+      name: 'John Doe',
+      phone: '+15551111111',
+      role: UserRole.parent,
+      createdAt: DateTime.now(),
+    );
+    _users['mock-driver-uid-456'] = UserModel(
+      id: 'mock-driver-uid-456',
+      name: 'Robert Smith',
+      phone: '+15552222222',
+      role: UserRole.driver,
+      createdAt: DateTime.now(),
+    );
+    _users['mock-assistant-uid-789'] = UserModel(
+      id: 'mock-assistant-uid-789',
+      name: 'Sarah Connor',
+      phone: '+15553333333',
+      role: UserRole.assistant,
+      createdAt: DateTime.now(),
+    );
+
     // Populate mock students
     _students['mock-student-1'] = StudentModel(
       id: 'mock-student-1',
@@ -141,7 +197,7 @@ class MockFirestoreService implements FirestoreService {
       className: 'Grade 3',
       section: 'A',
       schoolName: 'Greenwood International',
-      parentUid: AppConstants.mockParentUid,
+      parentUid: 'mock-parent-uid-123',
       qrCodeData: 'STUDENT_EMMA_DOE_123',
       status: StudentStatus.home,
     );
@@ -152,7 +208,7 @@ class MockFirestoreService implements FirestoreService {
       className: 'Grade 5',
       section: 'B',
       schoolName: 'Greenwood International',
-      parentUid: AppConstants.mockParentUid,
+      parentUid: 'mock-parent-uid-123',
       qrCodeData: 'STUDENT_LIAM_DOE_456',
       status: StudentStatus.atSchool,
     );
@@ -160,7 +216,7 @@ class MockFirestoreService implements FirestoreService {
     // Populate mock rides
     _rides['mock-ride-1'] = RideModel(
       id: 'mock-ride-1',
-      driverUid: AppConstants.mockDriverUid,
+      driverUid: 'mock-driver-uid-456',
       routeName: 'Greenwood Route 4B',
       studentIds: ['mock-student-1', 'mock-student-2'],
       currentLatitude: AppConstants.defaultSchoolLatitude,
@@ -168,6 +224,18 @@ class MockFirestoreService implements FirestoreService {
       status: RideStatus.scheduled,
       etaMinutes: '--',
     );
+  }
+
+  @override
+  Future<void> createUserProfile(UserModel user) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    _users[user.id] = user;
+  }
+
+  @override
+  Future<UserModel?> getUserProfile(String uid) async {
+    await Future.delayed(const Duration(milliseconds: 300));
+    return _users[uid];
   }
 
   @override
@@ -185,7 +253,6 @@ class MockFirestoreService implements FirestoreService {
       studentId, 
       () => StreamController<StudentModel>.broadcast()
     );
-    // Add initial item
     if (_students.containsKey(studentId)) {
       controller.add(_students[studentId]!);
     }
@@ -205,8 +272,6 @@ class MockFirestoreService implements FirestoreService {
       lastCheckOut: status == StudentStatus.home ? DateTime.now() : _students[studentId]!.lastCheckOut,
     );
     _students[studentId] = updated;
-    
-    // Notify streams
     _studentStreamControllers[studentId]?.add(updated);
   }
 
@@ -225,14 +290,10 @@ class MockFirestoreService implements FirestoreService {
       rideId, 
       () => StreamController<RideModel>.broadcast()
     );
-    
     if (_rides.containsKey(rideId)) {
       controller.add(_rides[rideId]!);
     }
-    
-    // Simulate motion if it's active
     _simulateRideMovement(rideId);
-    
     return controller.stream;
   }
 
@@ -250,7 +311,6 @@ class MockFirestoreService implements FirestoreService {
         return;
       }
 
-      // Linear interpolation between School and Home
       double progress = (tick % 10) / 10.0;
       double lat = AppConstants.defaultSchoolLatitude + 
           (AppConstants.defaultHomeLatitude - AppConstants.defaultSchoolLatitude) * progress;
@@ -278,7 +338,6 @@ class MockFirestoreService implements FirestoreService {
       _rideStreamControllers[rideId]?.add(updated);
       
       if (nextStatus == RideStatus.completed) {
-        // Also update students status to home when ride is completed
         for (var sid in currentRide.studentIds) {
           updateStudentStatus(sid, StudentStatus.home);
         }

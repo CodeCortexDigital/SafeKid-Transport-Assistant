@@ -42,7 +42,11 @@ class _SplashScreenState extends State<SplashScreen> {
   void _routeUser() {
     final auth = Provider.of<AuthProvider>(context, listen: false);
     if (auth.isAuthenticated) {
-      Navigator.pushReplacementNamed(context, AppConstants.routeHome);
+      if (auth.needsRegistration) {
+        Navigator.pushReplacementNamed(context, '/profile-setup');
+      } else {
+        Navigator.pushReplacementNamed(context, AppConstants.routeHome);
+      }
     } else {
       Navigator.pushReplacementNamed(context, AppConstants.routeLogin);
     }

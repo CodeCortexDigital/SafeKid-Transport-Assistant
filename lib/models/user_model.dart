@@ -1,52 +1,44 @@
 enum UserRole {
   parent,
   driver,
-  admin,
+  assistant,
 }
 
 class UserModel {
-  final String uid;
-  final String email;
+  final String id;
   final String name;
   final String phone;
   final UserRole role;
-  final String? profileImageUrl;
-  final List<String>? emergencyContacts;
+  final DateTime createdAt;
 
   UserModel({
-    required this.uid,
-    required this.email,
+    required this.id,
     required this.name,
     required this.phone,
     required this.role,
-    this.profileImageUrl,
-    this.emergencyContacts,
+    required this.createdAt,
   });
 
   // Convert Firestore DocumentSnapshot / JSON Map to UserModel
   factory UserModel.fromJson(Map<String, dynamic> json, String id) {
     return UserModel(
-      uid: id,
-      email: json['email'] ?? '',
+      id: id,
       name: json['name'] ?? '',
       phone: json['phone'] ?? '',
       role: _parseRole(json['role']),
-      profileImageUrl: json['profileImageUrl'],
-      emergencyContacts: json['emergencyContacts'] != null 
-          ? List<String>.from(json['emergencyContacts']) 
-          : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
     );
   }
 
   // Convert UserModel to JSON Map for Firestore write operations
   Map<String, dynamic> toJson() {
     return {
-      'email': email,
       'name': name,
       'phone': phone,
       'role': role.name,
-      'profileImageUrl': profileImageUrl,
-      'emergencyContacts': emergencyContacts,
+      'createdAt': createdAt.toIso8601String(),
     };
   }
 
@@ -61,22 +53,18 @@ class UserModel {
 
   // Copy with for immutable modifications
   UserModel copyWith({
-    String? uid,
-    String? email,
+    String? id,
     String? name,
     String? phone,
     UserRole? role,
-    String? profileImageUrl,
-    List<String>? emergencyContacts,
+    DateTime? createdAt,
   }) {
     return UserModel(
-      uid: uid ?? this.uid,
-      email: email ?? this.email,
+      id: id ?? this.id,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       role: role ?? this.role,
-      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
-      emergencyContacts: emergencyContacts ?? this.emergencyContacts,
+      createdAt: createdAt ?? this.createdAt,
     );
   }
 }

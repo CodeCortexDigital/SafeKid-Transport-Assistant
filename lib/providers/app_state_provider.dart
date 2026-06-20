@@ -35,8 +35,23 @@ class AppStateProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Initialize Firebase (will throw an exception if config is missing)
-      await Firebase.initializeApp();
+      try {
+        // First try native configuration files (google-services.json / GoogleService-Info.plist)
+        await Firebase.initializeApp();
+      } catch (_) {
+        // Fallback to manual options matching the provided web parameters
+        await Firebase.initializeApp(
+          options: const FirebaseOptions(
+            apiKey: 'AIzaSyD7kbY4q9yTC5yhwlkrqViy_8p_LBF_MgA',
+            appId: '1:473302958295:web:6bad73cc657a509cedb092',
+            messagingSenderId: '473302958295',
+            projectId: 'safekid-transport-assistant',
+            authDomain: 'safekid-transport-assistant.firebaseapp.com',
+            storageBucket: 'safekid-transport-assistant.firebasestorage.app',
+            measurementId: 'G-KQD6KX2P4G',
+          ),
+        );
+      }
       _isFirebaseInitialized = true;
 
       // Assign production services
@@ -57,7 +72,7 @@ class AppStateProvider extends ChangeNotifier {
     }
 
     // Initialize Repositories using the resolved services
-    authRepository = AuthRepository(authService);
+    authRepository = AuthRepository(authService, firestoreService);
     studentRepository = StudentRepository(firestoreService);
     locationRepository = LocationRepository(locationService, firestoreService);
 

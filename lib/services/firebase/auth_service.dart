@@ -2,10 +2,15 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import '../../models/user_model.dart';
 import '../../core/errors/failures.dart';
-import '../../core/constants/app_constants.dart';
 
 abstract class AuthService {
-  Future<UserModel> signInWithEmailAndPassword(String email, String password);
+  Future<void> verifyPhoneNumber(
+    String phoneNumber, {
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+  });
+  
+  Future<UserModel> signInWithOtp(String verificationId, String smsCode);
   Future<void> signOut();
   UserModel? get currentUser;
   Stream<UserModel?> get authStateChanges;
@@ -17,11 +22,11 @@ class FirebaseAuthService implements AuthService {
 
   UserModel _mapFirebaseUser(fb.User user) {
     return UserModel(
-      uid: user.uid,
-      email: user.email ?? '',
-      name: user.displayName ?? 'Firebase User',
+      id: user.uid,
+      name: user.displayName ?? '',
       phone: user.phoneNumber ?? '',
-      role: UserRole.parent, // In production, role is retrieved from Firestore
+      role: UserRole.parent, // Role is resolved from Firestore in repository/provider
+      createdAt: DateTime.now(),
     );
   }
 
@@ -39,18 +44,44 @@ class FirebaseAuthService implements AuthService {
   }
 
   @override
-  Future<UserModel> signInWithEmailAndPassword(String email, String password) async {
+  Future<void> verifyPhoneNumber(
+    String phoneNumber, {
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+  }) async {
     try {
-      final credential = await _firebaseAuth.signInWithEmailAndPassword(
-        email: email,
-        password: password,
+      await _firebaseAuth.verifyPhoneNumber(
+        phoneNumber: phoneNumber,
+        verificationCompleted: (fb.PhoneAuthCredential credential) async {
+          await _firebaseAuth.signInWithCredential(credential);
+        },
+        verificationFailed: (fb.FirebaseAuthException e) {
+          onVerificationFailed(e.message ?? 'Verification failed.');
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          onCodeSent(verificationId);
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {},
       );
-      if (credential.user == null) {
-        throw const AuthFailure('Failed to sign in. User is null.');
+    } catch (e) {
+      onVerificationFailed(e.toString());
+    }
+  }
+
+  @override
+  Future<UserModel> signInWithOtp(String verificationId, String smsCode) async {
+    try {
+      final credential = fb.PhoneAuthProvider.credential(
+        verificationId: verificationId,
+        smsCode: smsCode,
+      );
+      final userCredential = await _firebaseAuth.signInWithCredential(credential);
+      if (userCredential.user == null) {
+        throw const AuthFailure('Auth failed. User is null.');
       }
-      return _mapFirebaseUser(credential.user!);
+      return _mapFirebaseUser(userCredential.user!);
     } on fb.FirebaseAuthException catch (e) {
-      throw AuthFailure(e.message ?? 'Authentication error occurred.');
+      throw AuthFailure(e.message ?? 'OTP verification failed.');
     } catch (e) {
       throw AuthFailure(e.toString());
     }
@@ -62,13 +93,13 @@ class FirebaseAuthService implements AuthService {
   }
 }
 
-/// Demo/Local Mock implementation of [AuthService] used when Firebase is unavailable
+/// Demo/Local Mock implementation of [AuthService]
 class MockAuthService implements AuthService {
   final StreamController<UserModel?> _authStateController = StreamController<UserModel?>.broadcast();
   UserModel? _currentUser;
+  String _lastCheckedPhoneNumber = '';
 
   MockAuthService() {
-    // Initial State: user is logged out
     _authStateController.add(null);
   }
 
@@ -79,38 +110,69 @@ class MockAuthService implements AuthService {
   Stream<UserModel?> get authStateChanges => _authStateController.stream;
 
   @override
-  Future<UserModel> signInWithEmailAndPassword(String email, String password) async {
-    await Future.delayed(const Duration(milliseconds: 800)); // Simulate network latency
+  Future<void> verifyPhoneNumber(
+    String phoneNumber, {
+    required Function(String verificationId) onCodeSent,
+    required Function(String error) onVerificationFailed,
+  }) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    _lastCheckedPhoneNumber = phoneNumber;
+    onCodeSent('mock-verification-id-999');
+  }
 
-    if (email == AppConstants.mockEmail && password == AppConstants.mockPassword) {
-      _currentUser = UserModel(
-        uid: AppConstants.mockParentUid,
-        email: AppConstants.mockEmail,
-        name: AppConstants.mockParentName,
-        phone: '+1 (555) 123-4567',
-        role: UserRole.parent,
-        emergencyContacts: ['+1 (555) 987-6543'],
-      );
-      _authStateController.add(_currentUser);
-      return _currentUser!;
-    } else if (email == AppConstants.mockDriverEmail && password == AppConstants.mockPassword) {
-      _currentUser = UserModel(
-        uid: AppConstants.mockDriverUid,
-        email: AppConstants.mockDriverEmail,
-        name: AppConstants.mockDriverName,
-        phone: '+1 (555) 456-7890',
-        role: UserRole.driver,
-      );
+  @override
+  Future<UserModel> signInWithOtp(String verificationId, String smsCode) async {
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (smsCode == '123456') {
+      // Map mock configurations based on phone numbers entered
+      if (_lastCheckedPhoneNumber.contains('1111111')) {
+        // Mock Parent
+        _currentUser = UserModel(
+          id: 'mock-parent-uid-123',
+          name: 'John Doe',
+          phone: _lastCheckedPhoneNumber,
+          role: UserRole.parent,
+          createdAt: DateTime.now(),
+        );
+      } else if (_lastCheckedPhoneNumber.contains('2222222')) {
+        // Mock Driver
+        _currentUser = UserModel(
+          id: 'mock-driver-uid-456',
+          name: 'Robert Smith',
+          phone: _lastCheckedPhoneNumber,
+          role: UserRole.driver,
+          createdAt: DateTime.now(),
+        );
+      } else if (_lastCheckedPhoneNumber.contains('3333333')) {
+        // Mock Assistant
+        _currentUser = UserModel(
+          id: 'mock-assistant-uid-789',
+          name: 'Sarah Connor',
+          phone: _lastCheckedPhoneNumber,
+          role: UserRole.assistant,
+          createdAt: DateTime.now(),
+        );
+      } else {
+        // New number - needs profile setup
+        _currentUser = UserModel(
+          id: 'mock-user-new-${DateTime.now().millisecondsSinceEpoch}',
+          name: '',
+          phone: _lastCheckedPhoneNumber,
+          role: UserRole.parent, // default
+          createdAt: DateTime.now(),
+        );
+      }
+
       _authStateController.add(_currentUser);
       return _currentUser!;
     } else {
-      throw const AuthFailure('Invalid email or password. Use parent@safekid.com / password123');
+      throw const AuthFailure('Invalid verification code. Enter 123456 to log in.');
     }
   }
 
   @override
   Future<void> signOut() async {
-    await Future.delayed(const Duration(milliseconds: 400));
+    await Future.delayed(const Duration(milliseconds: 300));
     _currentUser = null;
     _authStateController.add(null);
   }

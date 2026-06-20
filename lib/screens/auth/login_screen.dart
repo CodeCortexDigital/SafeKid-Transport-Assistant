@@ -18,31 +18,29 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
+  final _phoneController = TextEditingController();
 
   @override
   void dispose() {
-    _emailController.dispose();
-    _passwordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleLogin() async {
+  Future<void> _handleSendOtp() async {
     if (_formKey.currentState!.validate()) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      final success = await auth.login(
-        _emailController.text.trim(),
-        _passwordController.text,
-      );
+      final phone = _phoneController.text.trim();
+      
+      final success = await auth.sendOtp(phone);
 
       if (mounted) {
         if (success) {
-          Navigator.pushReplacementNamed(context, AppConstants.routeHome);
+          // Navigate to OTP Screen
+          Navigator.pushNamed(context, '/otp');
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(auth.errorMessage ?? 'Authentication failed'),
+              content: Text(auth.errorMessage ?? 'Failed to send verification code'),
               backgroundColor: AppTheme.error,
             ),
           );
@@ -51,11 +49,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // Pre-fills fields for easy demo testing
-  void _quickFill(String email, String password) {
+  void _quickFill(String phone) {
     setState(() {
-      _emailController.text = email;
-      _passwordController.text = password;
+      _phoneController.text = phone;
     });
   }
 
@@ -64,7 +60,6 @@ class _LoginScreenState extends State<LoginScreen> {
     final size = MediaQuery.of(context).size;
     final appState = Provider.of<AppStateProvider>(context);
 
-    // Form contents widget
     Widget buildForm() {
       return Form(
         key: _formKey,
@@ -89,37 +84,25 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Welcome back',
+              'Sign In',
               style: Theme.of(context).textTheme.displayMedium,
             ),
             const SizedBox(height: 8),
             Text(
-              'Sign in to secure your child\'s transit.',
+              'Enter your phone number to receive a verification OTP code.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 32),
             CustomTextField(
-              controller: _emailController,
-              labelText: 'Email Address',
-              hintText: 'Enter your email',
-              prefixIcon: Icons.email_outlined,
-              keyboardType: TextInputType.emailAddress,
+              controller: _phoneController,
+              labelText: 'Phone Number',
+              hintText: '+1 555-0199',
+              prefixIcon: Icons.phone_android_rounded,
+              keyboardType: TextInputType.phone,
               validator: (val) {
-                if (val == null || val.isEmpty) return 'Email is required';
-                if (!val.contains('@')) return 'Enter a valid email';
-                return null;
-              },
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              controller: _passwordController,
-              labelText: 'Password',
-              hintText: 'Enter your password',
-              prefixIcon: Icons.lock_outline,
-              isPassword: true,
-              validator: (val) {
-                if (val == null || val.isEmpty) return 'Password is required';
-                if (val.length < 6) return 'Password must be at least 6 characters';
+                if (val == null || val.isEmpty) return 'Phone number is required';
+                if (!val.startsWith('+')) return 'Include country code (e.g. +1)';
+                if (val.length < 9) return 'Enter a valid phone number';
                 return null;
               },
             ),
@@ -127,14 +110,13 @@ class _LoginScreenState extends State<LoginScreen> {
             Consumer<AuthProvider>(
               builder: (context, auth, _) {
                 return CustomButton(
-                  text: 'Sign In',
-                  onPressed: _handleLogin,
+                  text: 'Send Verification Code',
+                  onPressed: _handleSendOtp,
                   isLoading: auth.isLoading,
                 );
               },
             ),
             
-            // Demo shortcuts helper
             if (!appState.isFirebaseInitialized) ...[
               const SizedBox(height: 24),
               Row(
@@ -157,7 +139,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 alignment: WrapAlignment.center,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: () => _quickFill(AppConstants.mockEmail, AppConstants.mockPassword),
+                    onPressed: () => _quickFill('+15551111111'),
                     icon: Icon(Icons.supervisor_account_outlined, size: 16, color: AppTheme.accentLight),
                     label: const Text('Parent Demo', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
@@ -166,9 +148,27 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   OutlinedButton.icon(
-                    onPressed: () => _quickFill(AppConstants.mockDriverEmail, AppConstants.mockPassword),
+                    onPressed: () => _quickFill('+15552222222'),
                     icon: Icon(Icons.directions_bus_outlined, size: 16, color: AppTheme.primaryLight),
                     label: const Text('Driver Demo', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      minimumSize: Size.zero,
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _quickFill('+15553333333'),
+                    icon: Icon(Icons.support_agent_rounded, size: 16, color: Colors.purpleAccent),
+                    label: const Text('Assistant Demo', style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      minimumSize: Size.zero,
+                    ),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () => _quickFill('+15559999999'),
+                    icon: Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.orangeAccent),
+                    label: const Text('New Register', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
@@ -186,7 +186,6 @@ class _LoginScreenState extends State<LoginScreen> {
       body: Container(
         color: AppTheme.backgroundColor,
         child: ResponsiveLayout(
-          // Mobile View
           mobile: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(24.0),
@@ -195,8 +194,6 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
           ),
-          
-          // Tablet/Desktop View (Split side-by-side)
           tablet: Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32.0),
@@ -207,7 +204,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   padding: EdgeInsets.zero,
                   child: Row(
                     children: [
-                      // Left banner panel
                       Expanded(
                         child: Container(
                           decoration: const BoxDecoration(
@@ -231,13 +227,13 @@ class _LoginScreenState extends State<LoginScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Icon(
-                                    Icons.school_outlined,
+                                    Icons.lock_person_outlined,
                                     size: 48,
                                     color: Colors.white,
                                   ),
                                   const SizedBox(height: 16),
                                   const Text(
-                                    'Real-time Safety Tracking',
+                                    'OTP Shield Logins',
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontSize: 32,
@@ -246,7 +242,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   ),
                                   const SizedBox(height: 12),
                                   Text(
-                                    'Keep track of drop zones, scan history, and school transport live status.',
+                                    'Access your role console securely. No passwords required, authenticated via high-speed OTP messaging.',
                                     style: TextStyle(
                                       color: Colors.white.withOpacity(0.8),
                                       fontSize: 16,
@@ -259,7 +255,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   Icon(Icons.check_circle_outline, color: Colors.white.withOpacity(0.6), size: 16),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Material 3 Ready',
+                                    'Google Firebase Secure',
                                     style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 12),
                                   ),
                                 ],
@@ -268,8 +264,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ),
-                      
-                      // Right form panel
                       Expanded(
                         child: Padding(
                           padding: const EdgeInsets.all(40.0),
