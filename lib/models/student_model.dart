@@ -27,6 +27,10 @@ class StudentModel {
   final String? customPickupTime;
   final String? customDropTime;
   final bool hasCustomTimings;
+  final bool isReadyForPickup;
+  final String? linkingOtp;
+  final DateTime? linkingOtpExpires;
+  final double monthlyFee;
 
   StudentModel({
     required this.id,
@@ -50,6 +54,10 @@ class StudentModel {
     this.customPickupTime,
     this.customDropTime,
     this.hasCustomTimings = false,
+    this.isReadyForPickup = false,
+    this.linkingOtp,
+    this.linkingOtpExpires,
+    this.monthlyFee = 150.0,
   });
 
   factory StudentModel.fromJson(Map<String, dynamic> json, String documentId) {
@@ -75,6 +83,10 @@ class StudentModel {
       customPickupTime: json['customPickupTime'],
       customDropTime: json['customDropTime'],
       hasCustomTimings: json['hasCustomTimings'] ?? false,
+      isReadyForPickup: json['isReadyForPickup'] ?? false,
+      linkingOtp: json['linkingOtp'],
+      linkingOtpExpires: json['linkingOtpExpires'] != null ? DateTime.tryParse(json['linkingOtpExpires'].toString()) : null,
+      monthlyFee: (json['monthlyFee'] as num?)?.toDouble() ?? 150.0,
     );
   }
 
@@ -100,6 +112,10 @@ class StudentModel {
       'customPickupTime': customPickupTime,
       'customDropTime': customDropTime,
       'hasCustomTimings': hasCustomTimings,
+      'isReadyForPickup': isReadyForPickup,
+      'linkingOtp': linkingOtp,
+      'linkingOtpExpires': linkingOtpExpires?.toIso8601String(),
+      'monthlyFee': monthlyFee,
     };
   }
 
@@ -134,6 +150,13 @@ class StudentModel {
     String? customPickupTime,
     String? customDropTime,
     bool? hasCustomTimings,
+    bool? isReadyForPickup,
+    String? linkingOtp,
+    DateTime? linkingOtpExpires,
+    double? monthlyFee,
+    bool clearOtp = false,
+    bool clearCheckIn = false,
+    bool clearCheckOut = false,
   }) {
     return StudentModel(
       id: id ?? this.id,
@@ -144,8 +167,8 @@ class StudentModel {
       parentUid: parentUid ?? this.parentUid,
       qrCodeData: qrCodeData ?? this.qrCodeData,
       status: status ?? this.status,
-      lastCheckIn: lastCheckIn ?? this.lastCheckIn,
-      lastCheckOut: lastCheckOut ?? this.lastCheckOut,
+      lastCheckIn: clearCheckIn ? null : (lastCheckIn ?? this.lastCheckIn),
+      lastCheckOut: clearCheckOut ? null : (lastCheckOut ?? this.lastCheckOut),
       parentName: parentName ?? this.parentName,
       parentPhone: parentPhone ?? this.parentPhone,
       pickupPoint: pickupPoint ?? this.pickupPoint,
@@ -157,6 +180,45 @@ class StudentModel {
       customPickupTime: customPickupTime ?? this.customPickupTime,
       customDropTime: customDropTime ?? this.customDropTime,
       hasCustomTimings: hasCustomTimings ?? this.hasCustomTimings,
+      isReadyForPickup: isReadyForPickup ?? this.isReadyForPickup,
+      linkingOtp: clearOtp ? null : (linkingOtp ?? this.linkingOtp),
+      linkingOtpExpires: clearOtp ? null : (linkingOtpExpires ?? this.linkingOtpExpires),
+      monthlyFee: monthlyFee ?? this.monthlyFee,
     );
+  }
+
+  bool get isStudentReady {
+    if (status == StudentStatus.absent) return false;
+    if (DateTime.now().weekday == DateTime.sunday) return false;
+    if (hasCustomTimings) {
+      return _isCurrentTimeAtOrAfter(customPickupTime);
+    }
+    return isReadyForPickup;
+  }
+
+  bool _isCurrentTimeAtOrAfter(String? timeStr) {
+    if (timeStr == null || timeStr.trim().isEmpty) return false;
+    try {
+      final cleanStr = timeStr.trim().toUpperCase();
+      final parts = cleanStr.split(' ');
+      final timeParts = parts[0].split(':');
+      int hour = int.parse(timeParts[0]);
+      int minute = int.parse(timeParts[1]);
+
+      if (parts.length > 1) {
+        final ampm = parts[1];
+        if (ampm == 'PM' && hour < 12) {
+          hour += 12;
+        } else if (ampm == 'AM' && hour == 12) {
+          hour = 0;
+        }
+      }
+
+      final now = DateTime.now();
+      final compareTime = DateTime(now.year, now.month, now.day, hour, minute);
+      return now.isAfter(compareTime) || now.isAtSameMomentAs(compareTime);
+    } catch (_) {
+      return true; // fallback
+    }
   }
 }

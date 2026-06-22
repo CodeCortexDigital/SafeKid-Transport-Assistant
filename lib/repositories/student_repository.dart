@@ -22,8 +22,8 @@ class StudentRepository {
     await _firestoreService.updateStudentStatus(studentId, status);
   }
 
-  Future<List<StudentModel>> fetchParentStudents(String parentUid) async {
-    return await _firestoreService.getStudentsForParent(parentUid);
+  Future<List<StudentModel>> fetchParentStudents(String parentUid, {String? parentPhone}) async {
+    return await _firestoreService.getStudentsForParent(parentUid, parentPhone: parentPhone);
   }
 
   Future<void> updateStudent(StudentModel student) async {
@@ -36,5 +36,9 @@ class StudentRepository {
 
   Future<List<StudentModel>> getAllStudents() async {
     return await _firestoreService.getAllStudents();
+  }
+
+  Future<StudentModel?> getStudentByOtp(String otp) async {
+    return await _firestoreService.getStudentByOtp(otp);
   }
 }

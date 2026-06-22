@@ -6,7 +6,6 @@ import '../../providers/chat_provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../models/user_model.dart';
 import '../../models/message_model.dart';
-import '../../widgets/glass_card.dart';
 import '../../widgets/loading_indicator.dart';
 
 class ChatListScreen extends StatefulWidget {

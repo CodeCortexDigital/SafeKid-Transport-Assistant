@@ -38,9 +38,9 @@ class AppConstants {
   static const String mockDriverName = 'Robert Smith';
   static const String mockDriverUid = 'mock-driver-uid-456';
   
-  // Default coordinates (e.g. Central Park, NY for mock tracking)
-  static const double defaultSchoolLatitude = 40.785091;
-  static const double defaultSchoolLongitude = -73.968285;
-  static const double defaultHomeLatitude = 40.760000;
-  static const double defaultHomeLongitude = -73.985000;
+  // Default coordinates (Attock / Hazro, Pakistan for mock tracking)
+  static const double defaultSchoolLatitude = 33.7680;
+  static const double defaultSchoolLongitude = 72.3620;
+  static const double defaultHomeLatitude = 33.9100;
+  static const double defaultHomeLongitude = 72.4900;
 }

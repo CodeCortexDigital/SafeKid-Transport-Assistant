@@ -22,10 +22,11 @@ abstract class FirestoreService {
   Future<StudentModel> getStudent(String studentId);
   Stream<StudentModel> streamStudent(String studentId);
   Future<void> updateStudentStatus(String studentId, StudentStatus status);
-  Future<List<StudentModel>> getStudentsForParent(String parentUid);
+  Future<List<StudentModel>> getStudentsForParent(String parentUid, {String? parentPhone});
   Future<void> updateStudent(StudentModel student);
   Future<void> deleteStudent(String studentId);
   Future<List<StudentModel>> getAllStudents();
+  Future<StudentModel?> getStudentByOtp(String otp);
 
   // Vehicles
   Future<VehicleModel> getVehicle(String vehicleId);
@@ -36,6 +37,7 @@ abstract class FirestoreService {
   Future<TripModel> getTrip(String tripId);
   Future<void> updateTripStatus(String tripId, TripStatus status);
   Future<void> updateTripLocation(String tripId, double latitude, double longitude);
+  Future<void> updateTripRouteName(String tripId, String routeName);
   Stream<TripModel> streamTrip(String tripId);
 
   // Scan Logs
@@ -58,6 +60,9 @@ abstract class FirestoreService {
   Future<void> updateBillingStatus(String billId, String status, {String? paymentMethod});
   Future<List<BillingModel>> getBillingRecordsForParents(List<String> parentIds);
   Stream<List<BillingModel>> streamBillingRecordsForParents(List<String> parentIds);
+  Future<void> createBillingRecord(BillingModel bill);
+  Future<void> updateBillingRecord(BillingModel bill);
+  Future<void> deleteBillingRecord(String billId);
 }
 
 /// Production implementation using Firebase Cloud Firestore
@@ -130,6 +135,7 @@ class FirebaseFirestoreService implements FirestoreService {
 
       await _firestore.collection(AppConstants.studentsCollection).doc(studentId).update({
         'status': status.name,
+        'isReadyForPickup': false,
         if (status == StudentStatus.atSchool) 'lastCheckIn': DateTime.now().toIso8601String(),
         if (status == StudentStatus.home) 'lastCheckOut': DateTime.now().toIso8601String(),
       });
@@ -141,7 +147,7 @@ class FirebaseFirestoreService implements FirestoreService {
   }
 
   @override
-  Future<List<StudentModel>> getStudentsForParent(String parentUid) async {
+  Future<List<StudentModel>> getStudentsForParent(String parentUid, {String? parentPhone}) async {
     try {
       final snapshot = await _firestore
           .collection(AppConstants.studentsCollection)
@@ -176,6 +182,21 @@ class FirebaseFirestoreService implements FirestoreService {
     try {
       final snapshot = await _firestore.collection(AppConstants.studentsCollection).get();
       return snapshot.docs.map((doc) => StudentModel.fromJson(doc.data(), doc.id)).toList();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<StudentModel?> getStudentByOtp(String otp) async {
+    try {
+      final snap = await _firestore
+          .collection(AppConstants.studentsCollection)
+          .where('linkingOtp', isEqualTo: otp)
+          .limit(1)
+          .get();
+      if (snap.docs.isEmpty) return null;
+      return StudentModel.fromJson(snap.docs.first.data(), snap.docs.first.id);
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -256,6 +277,17 @@ class FirebaseFirestoreService implements FirestoreService {
   }
 
   @override
+  Future<void> updateTripRouteName(String tripId, String routeName) async {
+    try {
+      await _firestore.collection('trips').doc(tripId).update({
+        'routeName': routeName,
+      });
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
   Stream<TripModel> streamTrip(String tripId) {
     return _firestore.collection('trips').doc(tripId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) {
@@ -280,9 +312,11 @@ class FirebaseFirestoreService implements FirestoreService {
       final snap = await _firestore
           .collection('scan_logs')
           .where('studentId', isEqualTo: studentId)
-          .orderBy('timestamp', descending: true)
           .get();
-      return snap.docs.map((doc) => ScanLogModel.fromJson(doc.data(), doc.id)).toList();
+      final logs = snap.docs.map((doc) => ScanLogModel.fromJson(doc.data(), doc.id)).toList();
+      // Sort in-memory by timestamp descending to avoid composite index requirements
+      logs.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      return logs;
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -302,15 +336,17 @@ class FirebaseFirestoreService implements FirestoreService {
     return _firestore
         .collection('messages')
         .where('senderId', whereIn: [senderId, receiverId])
-        .orderBy('timestamp', descending: false)
         .snapshots()
         .map((snap) {
-          return snap.docs
+          final list = snap.docs
               .map((doc) => MessageModel.fromJson(doc.data(), doc.id))
               .where((m) =>
                   (m.senderId == senderId && m.receiverId == receiverId) ||
                   (m.senderId == receiverId && m.receiverId == senderId))
               .toList();
+          // Sort in-memory by timestamp ascending to avoid composite index requirements
+          list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+          return list;
         });
   }
 
@@ -479,6 +515,33 @@ class FirebaseFirestoreService implements FirestoreService {
         .snapshots()
         .map((snap) => snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList());
   }
+
+  @override
+  Future<void> createBillingRecord(BillingModel bill) async {
+    try {
+      await _firestore.collection('billing').doc(bill.id).set(bill.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> updateBillingRecord(BillingModel bill) async {
+    try {
+      await _firestore.collection('billing').doc(bill.id).update(bill.toJson());
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<void> deleteBillingRecord(String billId) async {
+    try {
+      await _firestore.collection('billing').doc(billId).delete();
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
 }
 
 /// Demo/Local Mock implementation
@@ -522,36 +585,37 @@ class MockFirestoreService implements FirestoreService {
       name: 'Emma Doe',
       className: 'Grade 3',
       section: 'A',
-      schoolName: 'Greenwood International',
+      schoolName: 'Attock City School',
       parentUid: 'mock-parent-uid-123',
       qrCodeData: 'STUDENT_EMMA_DOE_123',
       status: StudentStatus.home,
+      isReadyForPickup: DateTime.now().weekday != DateTime.sunday,
       parentName: 'John Doe',
       parentPhone: '+15551111111',
-      pickupPoint: '74th St & Madison Ave',
-      dropPoint: '82nd St & Lex Ave',
-      pickupLatitude: 40.770000,
-      pickupLongitude: -73.978000,
-      dropLatitude: 40.770000,
-      dropLongitude: -73.978000,
+      pickupPoint: 'Hazro Stop',
+      dropPoint: 'Attock School Stop',
+      pickupLatitude: 33.9100,
+      pickupLongitude: 72.4900,
+      dropLatitude: 33.7680,
+      dropLongitude: 72.3620,
     );
     _students['mock-student-2'] = StudentModel(
       id: 'mock-student-2',
       name: 'Liam Doe',
       className: 'Grade 5',
       section: 'B',
-      schoolName: 'Greenwood International',
+      schoolName: 'Attock City School',
       parentUid: 'mock-parent-uid-123',
       qrCodeData: 'STUDENT_LIAM_DOE_456',
       status: StudentStatus.atSchool,
       parentName: 'John Doe',
       parentPhone: '+15551111111',
-      pickupPoint: '74th St & Madison Ave',
-      dropPoint: '82nd St & Lex Ave',
-      pickupLatitude: 40.778000,
-      pickupLongitude: -73.972000,
-      dropLatitude: 40.778000,
-      dropLongitude: -73.972000,
+      pickupPoint: 'Sanjwal Stop',
+      dropPoint: 'Attock School Stop',
+      pickupLatitude: 33.8500,
+      pickupLongitude: 72.4200,
+      dropLatitude: 33.7680,
+      dropLongitude: 72.3620,
     );
 
     // Vehicles
@@ -572,7 +636,7 @@ class MockFirestoreService implements FirestoreService {
       id: 'mock-ride-1',
       vehicleId: 'mock-vehicle-1',
       driverId: 'mock-driver-uid-456',
-      routeName: 'Greenwood Route 4B',
+      routeName: 'Greenwood Route 4B (Standard)',
       studentIds: ['mock-student-1', 'mock-student-2'],
       currentLatitude: AppConstants.defaultSchoolLatitude,
       currentLongitude: AppConstants.defaultSchoolLongitude,
@@ -584,6 +648,7 @@ class MockFirestoreService implements FirestoreService {
     _billing['mock-bill-1'] = BillingModel(
       id: 'mock-bill-1',
       parentId: 'mock-parent-uid-123',
+      studentId: 'mock-student-1',
       amount: 150.00,
       status: 'paid',
       billingDate: DateTime.now().subtract(const Duration(days: 30)),
@@ -593,6 +658,7 @@ class MockFirestoreService implements FirestoreService {
     _billing['mock-bill-2'] = BillingModel(
       id: 'mock-bill-2',
       parentId: 'mock-parent-uid-123',
+      studentId: 'mock-student-2',
       amount: 150.00,
       status: 'pending',
       billingDate: DateTime.now(),
@@ -661,6 +727,7 @@ class MockFirestoreService implements FirestoreService {
 
     final updated = student.copyWith(
       status: status,
+      isReadyForPickup: false,
       lastCheckIn: status == StudentStatus.atSchool ? DateTime.now() : student.lastCheckIn,
       lastCheckOut: status == StudentStatus.home ? DateTime.now() : student.lastCheckOut,
     );
@@ -671,7 +738,7 @@ class MockFirestoreService implements FirestoreService {
   }
 
   @override
-  Future<List<StudentModel>> getStudentsForParent(String parentUid) async {
+  Future<List<StudentModel>> getStudentsForParent(String parentUid, {String? parentPhone}) async {
     await Future.delayed(const Duration(milliseconds: 300));
     return _students.values.where((student) => student.parentUid == parentUid).toList();
   }
@@ -694,6 +761,17 @@ class MockFirestoreService implements FirestoreService {
   Future<List<StudentModel>> getAllStudents() async {
     await Future.delayed(const Duration(milliseconds: 300));
     return _students.values.toList();
+  }
+
+  @override
+  Future<StudentModel?> getStudentByOtp(String otp) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    for (var student in _students.values) {
+      if (student.linkingOtp == otp) {
+        return student;
+      }
+    }
+    return null;
   }
 
   @override
@@ -762,6 +840,18 @@ class MockFirestoreService implements FirestoreService {
     final updated = _trips[tripId]!.copyWith(
       currentLatitude: latitude,
       currentLongitude: longitude,
+    );
+    _trips[tripId] = updated;
+    _tripStreamControllers[tripId]?.add(updated);
+  }
+
+  @override
+  Future<void> updateTripRouteName(String tripId, String routeName) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!_trips.containsKey(tripId)) return;
+
+    final updated = _trips[tripId]!.copyWith(
+      routeName: routeName,
     );
     _trips[tripId] = updated;
     _tripStreamControllers[tripId]?.add(updated);
@@ -983,6 +1073,39 @@ class MockFirestoreService implements FirestoreService {
     final initialList = _billing.values.where((bill) => parentIds.contains(bill.parentId)).toList();
     controller.add(initialList);
     return controller.stream;
+  }
+
+  @override
+  Future<void> createBillingRecord(BillingModel bill) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    _billing[bill.id] = bill;
+    _notifyBillingUpdate(bill.parentId);
+  }
+
+  @override
+  Future<void> updateBillingRecord(BillingModel bill) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    _billing[bill.id] = bill;
+    _notifyBillingUpdate(bill.parentId);
+  }
+
+  @override
+  Future<void> deleteBillingRecord(String billId) async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    final bill = _billing.remove(billId);
+    if (bill != null) {
+      _notifyBillingUpdate(bill.parentId);
+    }
+  }
+
+  void _notifyBillingUpdate(String parentId) {
+    _billingStreamControllers.forEach((key, controller) {
+      final keys = key.split('_');
+      if (keys.contains(parentId) || key == parentId) {
+        final list = _billing.values.where((b) => keys.contains(b.parentId) || b.parentId == key).toList();
+        controller.add(list);
+      }
+    });
   }
 }
 

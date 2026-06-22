@@ -1,11 +1,15 @@
+import 'dart:math';
+import 'package:flutter/services.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/attendance_provider.dart';
+import '../../providers/app_state_provider.dart';
 import '../../models/student_model.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/glass_card.dart';
 import '../../widgets/custom_text_field.dart';
 import '../../core/constants/app_constants.dart';
+import '../../services/firebase/notification_service.dart';
 
 class StudentManagementScreen extends StatefulWidget {
   const StudentManagementScreen({super.key});
@@ -235,6 +239,31 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Readiness Alert Section
+                if (student.isStudentReady) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.success.withOpacity(0.2), width: 1),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded, color: AppTheme.success, size: 20),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Child is ready at the gate for pickup',
+                            style: TextStyle(color: AppTheme.success, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Timings Row
                 if (student.hasCustomTimings) ...[
                   Container(
@@ -361,17 +390,157 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         '${student.schoolName} • ${student.className} - ${student.section}',
                         style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                       ),
+                      if (student.parentUid.isEmpty) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppTheme.warning.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: AppTheme.warning.withOpacity(0.3), width: 0.5),
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.pending_rounded, size: 10, color: AppTheme.warning),
+                                  SizedBox(width: 4),
+                                  Text(
+                                    'PENDING LINK',
+                                    style: TextStyle(color: AppTheme.warning, fontSize: 8, fontWeight: FontWeight.bold),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (student.linkingOtp != null) ...[
+                              const SizedBox(width: 8),
+                              (() {
+                                final isExpired = student.linkingOtpExpires != null && DateTime.now().isAfter(student.linkingOtpExpires!);
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: (isExpired ? AppTheme.error : AppTheme.success).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: (isExpired ? AppTheme.error : AppTheme.success).withOpacity(0.3), width: 0.5),
+                                  ),
+                                  child: Text(
+                                    'OTP: ${student.linkingOtp} ${isExpired ? "(EXPIRED)" : "(ACTIVE)"}',
+                                    style: TextStyle(
+                                      color: isExpired ? AppTheme.error : AppTheme.success,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                );
+                              })(),
+                            ],
+                          ],
+                        ),
+                      ],
+                      if (student.isStudentReady || student.status == StudentStatus.absent || student.hasCustomTimings) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (student.isStudentReady) ...[
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.success.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: AppTheme.success.withOpacity(0.3), width: 0.5),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.check_circle_outline, size: 10, color: AppTheme.success),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'READY',
+                                      style: TextStyle(color: AppTheme.success, fontSize: 8, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else if (student.status != StudentStatus.absent) ...[
+                               Container(
+                                 margin: const EdgeInsets.only(right: 6),
+                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                 decoration: BoxDecoration(
+                                   color: AppTheme.warning.withOpacity(0.2),
+                                   borderRadius: BorderRadius.circular(4),
+                                   border: Border.all(color: AppTheme.warning.withOpacity(0.3), width: 0.5),
+                                 ),
+                                 child: const Row(
+                                   children: [
+                                     Icon(Icons.access_time_rounded, size: 10, color: AppTheme.warning),
+                                     SizedBox(width: 4),
+                                     Text(
+                                       'WAITING',
+                                       style: TextStyle(color: AppTheme.warning, fontSize: 8, fontWeight: FontWeight.bold),
+                                     ),
+                                   ],
+                                 ),
+                               ),
+                             ],
+                            if (student.status == StudentStatus.absent) ...[
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.error.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.cancel_outlined, size: 10, color: AppTheme.error),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'LEAVE',
+                                      style: TextStyle(color: AppTheme.error, fontSize: 8, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (student.hasCustomTimings) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accentLight.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'CUSTOM TIMINGS',
+                                  style: TextStyle(color: AppTheme.accentLight, fontSize: 8, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 PopupMenuButton<String>(
-                  onSelected: (val) {
+                  onSelected: (val) async {
                     if (val == 'edit') {
                       _showStudentForm(context, student);
                     } else if (val == 'delete') {
                       _showDeleteConfirm(context, student);
                     } else if (val == 'qr') {
                       Navigator.pushNamed(context, '/qr-card', arguments: student);
+                    } else if (val == 'otp') {
+                      final otp = (100000 + Random().nextInt(900000)).toString();
+                      final expires = DateTime.now().add(const Duration(minutes: 5));
+                      final updated = student.copyWith(
+                        linkingOtp: otp,
+                        linkingOtpExpires: expires,
+                      );
+                      final ok = await Provider.of<AttendanceProvider>(context, listen: false).editStudent(updated);
+                      if (ok && context.mounted) {
+                        _showOtpShareDialog(context, student.name, otp);
+                      }
                     }
                   },
                   itemBuilder: (context) => [
@@ -385,6 +554,17 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         ],
                       ),
                     ),
+                    if (student.parentUid.isEmpty)
+                      PopupMenuItem(
+                        value: 'otp',
+                        child: Row(
+                          children: [
+                            const Icon(Icons.vpn_key_rounded, size: 18, color: AppTheme.accentLight),
+                            const SizedBox(width: 8),
+                            Text(student.linkingOtp == null ? 'Generate Link OTP' : 'Regenerate Link OTP'),
+                          ],
+                        ),
+                      ),
                     const PopupMenuItem(
                       value: 'edit',
                       child: Row(
@@ -486,152 +666,340 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     final dropController = TextEditingController(text: student?.dropPoint);
     final formKey = GlobalKey<FormState>();
 
+    double pickupLat = student?.pickupLatitude ?? AppConstants.defaultHomeLatitude;
+    double pickupLng = student?.pickupLongitude ?? AppConstants.defaultHomeLongitude;
+    double dropLat = student?.dropLatitude ?? AppConstants.defaultHomeLatitude;
+    double dropLng = student?.dropLongitude ?? AppConstants.defaultHomeLongitude;
+
+    bool isPickupLocating = false;
+    bool isDropLocating = false;
+    bool hasCustom = student?.hasCustomTimings ?? false;
+    final customPickupController = TextEditingController(text: student?.customPickupTime ?? '08:30 AM');
+    final customDropController = TextEditingController(text: student?.customDropTime ?? '01:30 PM');
+
     showDialog(
       context: context,
       builder: (context) {
-        return AlertDialog(
-          backgroundColor: AppTheme.surfaceColor,
-          title: Text(
-            isEdit ? 'Edit Student Details' : 'Add New Student',
-            style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
-          ),
-          content: SingleChildScrollView(
-            child: Form(
-              key: formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  CustomTextField(
-                    controller: nameController,
-                    labelText: 'Student Full Name',
-                    hintText: 'e.g. Emma Doe',
-                    prefixIcon: Icons.badge_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Student Name required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  CustomTextField(
-                    controller: schoolController,
-                    labelText: 'School Name',
-                    hintText: 'e.g. Greenwood School',
-                    prefixIcon: Icons.school_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'School Name required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              title: Text(
+                isEdit ? 'Edit Student Details' : 'Add New Student',
+                style: const TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+              ),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Expanded(
-                        child: CustomTextField(
-                          controller: classController,
-                          labelText: 'Grade / Class',
-                          hintText: 'e.g. Grade 3',
-                          prefixIcon: Icons.class_outlined,
-                          validator: (val) => val == null || val.trim().isEmpty ? 'Class required' : null,
+                      CustomTextField(
+                        controller: nameController,
+                        labelText: 'Student Full Name',
+                        hintText: 'e.g. Emma Doe',
+                        prefixIcon: Icons.badge_outlined,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Student Name required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: schoolController,
+                        labelText: 'School Name',
+                        hintText: 'e.g. Greenwood School',
+                        prefixIcon: Icons.school_outlined,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'School Name required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: CustomTextField(
+                              controller: classController,
+                              labelText: 'Grade / Class',
+                              hintText: 'e.g. Grade 3',
+                              prefixIcon: Icons.class_outlined,
+                              validator: (val) => val == null || val.trim().isEmpty ? 'Class required' : null,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: CustomTextField(
+                              controller: sectionController,
+                              labelText: 'Section',
+                              hintText: 'e.g. A',
+                              prefixIcon: Icons.grid_view_outlined,
+                              validator: (val) => val == null || val.trim().isEmpty ? 'Section required' : null,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: parentNameController,
+                        labelText: 'Parent Name',
+                        hintText: 'e.g. John Doe',
+                        prefixIcon: Icons.person_outline_rounded,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Parent Name required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: parentPhoneController,
+                        labelText: 'Parent Phone Number',
+                        hintText: 'e.g. +1 555-1111',
+                        prefixIcon: Icons.phone_iphone_rounded,
+                        keyboardType: TextInputType.phone,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Parent Phone required' : null,
+                      ),
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: pickupController,
+                        labelText: 'Pickup Point Address',
+                        hintText: 'e.g. 74th St & Madison Ave',
+                        prefixIcon: Icons.location_on_outlined,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Pickup point required' : null,
+                        suffixIcon: StatefulBuilder(
+                          builder: (context, setSuffixState) {
+                            return isPickupLocating
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentLight),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.my_location_rounded, color: AppTheme.accentLight),
+                                    tooltip: 'Use current GPS location',
+                                    onPressed: () async {
+                                      setSuffixState(() {
+                                        isPickupLocating = true;
+                                      });
+                                      try {
+                                        final appState = Provider.of<AppStateProvider>(context, listen: false);
+                                        final pos = await appState.locationService.getCurrentLocation();
+                                        pickupLat = pos.latitude;
+                                        pickupLng = pos.longitude;
+                                        pickupController.text = '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)} (Current Location)';
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Successfully loaded current GPS coordinates for Pickup Point!'),
+                                            backgroundColor: AppTheme.success,
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Failed to get location: $e'),
+                                            backgroundColor: AppTheme.error,
+                                          ),
+                                        );
+                                      } finally {
+                                        setSuffixState(() {
+                                          isPickupLocating = false;
+                                        });
+                                      }
+                                    },
+                                  );
+                          },
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: CustomTextField(
-                          controller: sectionController,
-                          labelText: 'Section',
-                          hintText: 'e.g. A',
-                          prefixIcon: Icons.grid_view_outlined,
-                          validator: (val) => val == null || val.trim().isEmpty ? 'Section required' : null,
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: dropController,
+                        labelText: 'Drop Point Address',
+                        hintText: 'e.g. 82nd St & Lex Ave',
+                        prefixIcon: Icons.location_searching_rounded,
+                        validator: (val) => val == null || val.trim().isEmpty ? 'Drop point required' : null,
+                        suffixIcon: StatefulBuilder(
+                          builder: (context, setSuffixState) {
+                            return isDropLocating
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: Padding(
+                                      padding: EdgeInsets.all(12.0),
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accentLight),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(Icons.my_location_rounded, color: AppTheme.accentLight),
+                                    tooltip: 'Use current GPS location',
+                                    onPressed: () async {
+                                      setSuffixState(() {
+                                        isDropLocating = true;
+                                      });
+                                      try {
+                                        final appState = Provider.of<AppStateProvider>(context, listen: false);
+                                        final pos = await appState.locationService.getCurrentLocation();
+                                        dropLat = pos.latitude;
+                                        dropLng = pos.longitude;
+                                        dropController.text = '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)} (Current Location)';
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(
+                                            content: Text('Successfully loaded current GPS coordinates for Drop Point!'),
+                                            backgroundColor: AppTheme.success,
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Failed to get location: $e'),
+                                            backgroundColor: AppTheme.error,
+                                          ),
+                                        );
+                                      } finally {
+                                        setSuffixState(() {
+                                          isDropLocating = false;
+                                        });
+                                      }
+                                    },
+                                  );
+                          },
                         ),
                       ),
+                      const Divider(color: Colors.white10),
+                      SwitchListTile(
+                        title: const Text('Custom Schedule', style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
+                        subtitle: const Text('Enable special pickup/drop times', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                        value: hasCustom,
+                        activeColor: AppTheme.accentLight,
+                        contentPadding: EdgeInsets.zero,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            hasCustom = val;
+                          });
+                        },
+                      ),
+                      if (hasCustom) ...[
+                        const SizedBox(height: 12),
+                        CustomTextField(
+                          controller: customPickupController,
+                          labelText: 'Custom Pickup Time',
+                          hintText: 'e.g. 08:30 AM',
+                          prefixIcon: Icons.alarm_rounded,
+                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight, size: 18),
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (time != null) {
+                                customPickupController.text = time.format(context);
+                              }
+                            },
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        CustomTextField(
+                          controller: customDropController,
+                          labelText: 'Custom Drop Time',
+                          hintText: 'e.g. 01:30 PM',
+                          prefixIcon: Icons.alarm_off_rounded,
+                          validator: (val) => val == null || val.isEmpty ? 'Required' : null,
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight, size: 18),
+                            onPressed: () async {
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (time != null) {
+                                customDropController.text = time.format(context);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
                     ],
                   ),
-                  const SizedBox(height: 12),
-                  CustomTextField(
-                    controller: parentNameController,
-                    labelText: 'Parent Name',
-                    hintText: 'e.g. John Doe',
-                    prefixIcon: Icons.person_outline_rounded,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Parent Name required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  CustomTextField(
-                    controller: parentPhoneController,
-                    labelText: 'Parent Phone Number',
-                    hintText: 'e.g. +1 555-1111',
-                    prefixIcon: Icons.phone_iphone_rounded,
-                    keyboardType: TextInputType.phone,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Parent Phone required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  CustomTextField(
-                    controller: pickupController,
-                    labelText: 'Pickup Point Address',
-                    hintText: 'e.g. 74th St & Madison Ave',
-                    prefixIcon: Icons.location_on_outlined,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Pickup point required' : null,
-                  ),
-                  const SizedBox(height: 12),
-                  CustomTextField(
-                    controller: dropController,
-                    labelText: 'Drop Point Address',
-                    hintText: 'e.g. 82nd St & Lex Ave',
-                    prefixIcon: Icons.location_searching_rounded,
-                    validator: (val) => val == null || val.trim().isEmpty ? 'Drop point required' : null,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                if (formKey.currentState?.validate() ?? false) {
-                  final attendance = Provider.of<AttendanceProvider>(context, listen: false);
-                  final id = isEdit ? student.id : 'mock-student-${DateTime.now().millisecondsSinceEpoch}';
-                  
-                  final updatedStudent = StudentModel(
-                    id: id,
-                    name: nameController.text.trim(),
-                    className: classController.text.trim(),
-                    section: sectionController.text.trim(),
-                    schoolName: schoolController.text.trim(),
-                    parentUid: student?.parentUid ?? 'mock-parent-uid-123',
-                    qrCodeData: student?.qrCodeData ?? 'STUDENT_${nameController.text.trim().replaceAll(' ', '_').toUpperCase()}_${DateTime.now().millisecondsSinceEpoch}',
-                    status: student?.status ?? StudentStatus.home,
-                    parentName: parentNameController.text.trim(),
-                    parentPhone: parentPhoneController.text.trim(),
-                    pickupPoint: pickupController.text.trim(),
-                    dropPoint: dropController.text.trim(),
-                    pickupLatitude: student?.pickupLatitude ?? AppConstants.defaultHomeLatitude,
-                    pickupLongitude: student?.pickupLongitude ?? AppConstants.defaultHomeLongitude,
-                    dropLatitude: student?.dropLatitude ?? AppConstants.defaultHomeLatitude,
-                    dropLongitude: student?.dropLongitude ?? AppConstants.defaultHomeLongitude,
-                    lastCheckIn: student?.lastCheckIn,
-                    lastCheckOut: student?.lastCheckOut,
-                  );
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (formKey.currentState?.validate() ?? false) {
+                      final attendance = Provider.of<AttendanceProvider>(context, listen: false);
+                      final id = isEdit ? student.id : 'mock-student-${DateTime.now().millisecondsSinceEpoch}';
+                      final otp = isEdit ? student.linkingOtp : (100000 + Random().nextInt(900000)).toString();
+                      final expires = isEdit ? student.linkingOtpExpires : DateTime.now().add(const Duration(minutes: 5));
+                      
+                      final updatedStudent = StudentModel(
+                        id: id,
+                        name: nameController.text.trim(),
+                        className: classController.text.trim(),
+                        section: sectionController.text.trim(),
+                        schoolName: schoolController.text.trim(),
+                        parentUid: student?.parentUid ?? '',
+                        qrCodeData: student?.qrCodeData ?? 'STUDENT_${nameController.text.trim().replaceAll(' ', '_').toUpperCase()}_${DateTime.now().millisecondsSinceEpoch}',
+                        status: student?.status ?? StudentStatus.home,
+                        parentName: parentNameController.text.trim(),
+                        parentPhone: parentPhoneController.text.trim(),
+                        pickupPoint: pickupController.text.trim(),
+                        dropPoint: dropController.text.trim(),
+                        pickupLatitude: pickupLat,
+                        pickupLongitude: pickupLng,
+                        dropLatitude: dropLat,
+                        dropLongitude: dropLng,
+                        lastCheckIn: student?.lastCheckIn,
+                        lastCheckOut: student?.lastCheckOut,
+                        linkingOtp: otp,
+                        linkingOtpExpires: expires,
+                        hasCustomTimings: hasCustom,
+                        customPickupTime: hasCustom ? customPickupController.text.trim() : null,
+                        customDropTime: hasCustom ? customDropController.text.trim() : null,
+                      );
 
-                  bool success;
-                  if (isEdit) {
-                    success = await attendance.editStudent(updatedStudent);
-                  } else {
-                    success = await attendance.addStudent(updatedStudent);
-                  }
+                      bool success;
+                      if (isEdit) {
+                        success = await attendance.editStudent(updatedStudent);
+                      } else {
+                        success = await attendance.addStudent(updatedStudent);
+                      }
 
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(success
-                            ? (attendance.successMessage ?? 'Changes saved!')
-                            : (attendance.errorMessage ?? 'An error occurred.')),
-                        backgroundColor: success ? AppTheme.success : AppTheme.error,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: Text(isEdit ? 'Save Changes' : 'Add Student'),
-            ),
-          ],
+                      if (success) {
+                        if (hasCustom) {
+                          NotificationService().triggerNotification(
+                            title: 'Custom Schedule Updated',
+                            body: 'Driver has set custom pickup/drop timings for ${updatedStudent.name}: Pickup at ${updatedStudent.customPickupTime ?? "N/A"}, Drop at ${updatedStudent.customDropTime ?? "N/A"}.',
+                            studentId: updatedStudent.id,
+                          );
+                        } else if (isEdit && student!.hasCustomTimings) {
+                          NotificationService().triggerNotification(
+                            title: 'Route Timings Reset',
+                            body: 'Driver has reset timings for ${updatedStudent.name} to standard schedule.',
+                            studentId: updatedStudent.id,
+                          );
+                        }
+                      }
+
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(success
+                                ? (attendance.successMessage ?? 'Changes saved!')
+                                : (attendance.errorMessage ?? 'An error occurred.')),
+                            backgroundColor: success ? AppTheme.success : AppTheme.error,
+                          ),
+                        );
+                        if (success && !isEdit && otp != null) {
+                          _showOtpShareDialog(context, updatedStudent.name, otp);
+                        }
+                      }
+                    }
+                  },
+                  child: Text(isEdit ? 'Save Changes' : 'Add Student'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -671,6 +1039,92 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                 }
               },
               child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showOtpShareDialog(BuildContext context, String kidName, String otp) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withOpacity(0.08)),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.vpn_key_rounded, color: AppTheme.accentLight),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Linking OTP for $kidName',
+                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Share this code with the parent. They must enter it on their dashboard to link their account.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.accentLight.withOpacity(0.3)),
+                ),
+                child: SelectableText(
+                  otp,
+                  style: const TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.accentLight,
+                    letterSpacing: 6,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.timer_outlined, size: 14, color: AppTheme.warning),
+                  SizedBox(width: 4),
+                  Text(
+                    'Expires in 5 minutes',
+                    style: TextStyle(fontSize: 11, color: AppTheme.warning, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: otp));
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('OTP copied to clipboard!'),
+                    backgroundColor: AppTheme.success,
+                  ),
+                );
+              },
+              child: const Text('Copy Code', style: TextStyle(color: AppTheme.accentLight)),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+              child: const Text('Done', style: TextStyle(color: Colors.white)),
             ),
           ],
         );

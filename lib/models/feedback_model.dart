@@ -25,7 +25,7 @@ class FeedbackModel {
     this.subject = '',
     this.description = '',
     int? rating,
-  }) : this.rating = rating ?? ((driverRating + safetyRating + punctualityRating) / 3).round();
+  }) : rating = rating ?? ((driverRating + safetyRating + punctualityRating) / 3).round();
 
   factory FeedbackModel.fromJson(Map<String, dynamic> json, String docId) {
     final driver = json['driverRating'] is num ? (json['driverRating'] as num).toInt() : 5;

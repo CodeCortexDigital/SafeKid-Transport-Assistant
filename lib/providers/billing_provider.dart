@@ -39,4 +39,52 @@ class BillingProvider extends ChangeNotifier {
   Future<void> markAsPaid(String billId) async {
     await payBill(billId, paymentMethod: 'Cash');
   }
+
+  Future<void> createBill(BillingModel bill) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _billingRepository.createBill(bill);
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> updateBill(BillingModel bill) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _billingRepository.updateBill(bill);
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
+
+  Future<void> deleteBill(String billId) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await _billingRepository.deleteBill(billId);
+      _isLoading = false;
+      notifyListeners();
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      rethrow;
+    }
+  }
 }

@@ -51,10 +51,19 @@ class _InteractiveGoogleMapState extends State<InteractiveGoogleMap> {
 
   void _animateToPosition() async {
     if (_mapController != null) {
-      final cameraUpdate = CameraUpdate.newLatLng(
-        LatLng(widget.currentLatitude, widget.currentLongitude),
-      );
-      await _mapController!.animateCamera(cameraUpdate);
+      double lat = widget.currentLatitude;
+      double lng = widget.currentLongitude;
+      
+      // Fallback if driver location is uninitialized
+      if (lat == 0.0 || lng == 0.0) {
+        lat = widget.pickupLatitude ?? widget.schoolLatitude;
+        lng = widget.pickupLongitude ?? widget.schoolLongitude;
+      }
+      
+      if (lat != 0.0 && lng != 0.0) {
+        final cameraUpdate = CameraUpdate.newLatLng(LatLng(lat, lng));
+        await _mapController!.animateCamera(cameraUpdate);
+      }
     }
   }
 
@@ -168,6 +177,7 @@ class _InteractiveGoogleMapState extends State<InteractiveGoogleMap> {
             onMapCreated: (controller) {
               _mapController = controller;
               _controllerCompleter.complete(controller);
+              _animateToPosition();
             },
           ),
         ),

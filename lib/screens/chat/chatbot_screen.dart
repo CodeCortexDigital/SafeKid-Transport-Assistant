@@ -65,7 +65,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         });
 
         // Ensure we load students
-        Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id);
+        Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id, parentPhone: user.phone);
 
         // Auto-connect tracking to simulation trip if a child is in transit
         final attendance = Provider.of<AttendanceProvider>(context, listen: false);
@@ -192,7 +192,8 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
       for (var s in students) {
         if (s.status == StudentStatus.inTransit) {
           final timeStr = s.lastCheckIn != null ? _formatTimeOnly(s.lastCheckIn!) : '07:45 AM';
-          reports.add("✅ *${s.name}* was picked up and is in transit. Boarded Greenwood Route 4B at $timeStr.");
+          final route = currentTrip?.routeName ?? 'Greenwood Route 4B (Standard)';
+          reports.add("✅ *${s.name}* was picked up and is in transit. Boarded $route at $timeStr.");
         } else if (s.status == StudentStatus.atSchool) {
           final timeStr = s.lastCheckIn != null ? _formatTimeOnly(s.lastCheckIn!) : '08:00 AM';
           reports.add("✅ *${s.name}* has already arrived at school. Boarded at $timeStr.");
@@ -202,7 +203,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           reports.add("🏠 *${s.name}* is at home. The van has not picked them up yet.");
         }
       }
-      return "Here is the morning pickup status:\n\n" + reports.join('\n\n');
+      return "Here is the morning pickup status:\n\n${reports.join('\n\n')}";
     }
 
     // 3. Has my child reached school?
@@ -228,7 +229,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
           reports.add("🏠 *${s.name}* is still at home.");
         }
       }
-      return "Here is the school arrival status:\n\n" + reports.join('\n\n');
+      return "Here is the school arrival status:\n\n${reports.join('\n\n')}";
     }
 
     // 4. What is my fee status?
@@ -252,7 +253,7 @@ class _ChatbotScreenState extends State<ChatbotScreen> {
         final dueDateStr = "${b.dueDate.day}/${b.dueDate.month}/${b.dueDate.year}";
         reports.add("• Invoice #${b.id.substring(0, min(5, b.id.length))}: \$${b.amount.toStringAsFixed(2)} (${b.status.toUpperCase()}) due by $dueDateStr.");
       }
-      return "💳 *Outstanding Fees:*\n\n" + reports.join('\n') + "\n\nYou can pay outstanding fees instantly on the dashboard under Billing.";
+      return "💳 *Outstanding Fees:*\n\n${reports.join('\n')}\n\nYou can pay outstanding fees instantly on the dashboard under Billing.";
     }
 
     // 5. What are school timings?

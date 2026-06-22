@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/app_state_provider.dart';
 import '../../core/constants/app_constants.dart';
 import '../../core/theme/app_theme.dart';
 import '../../core/utils/responsive_layout.dart';
-import '../../widgets/custom_button.dart';
-import '../../widgets/custom_text_field.dart';
 import '../../widgets/glass_card.dart';
+
+import '../../services/auth/biometric_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -18,47 +17,79 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _phoneController = TextEditingController();
+  bool _isBiometricsAvailable = false;
+  bool _isBiometricsEnabled = false;
 
   @override
-  void dispose() {
-    _phoneController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _checkBiometrics();
   }
 
-  Future<void> _handleSendOtp() async {
-    if (_formKey.currentState!.validate()) {
-      final auth = Provider.of<AuthProvider>(context, listen: false);
-      final phone = _phoneController.text.trim();
-      
-      final success = await auth.sendOtp(phone);
-
-      if (mounted) {
-        if (success) {
-          // Navigate to OTP Screen
-          Navigator.pushNamed(context, '/otp');
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(auth.errorMessage ?? 'Failed to send verification code'),
-              backgroundColor: AppTheme.error,
-            ),
-          );
-        }
+  Future<void> _checkBiometrics() async {
+    final available = await BiometricService.isBiometricAvailable();
+    final enabled = await BiometricService.isBiometricEnabled();
+    if (mounted) {
+      setState(() {
+        _isBiometricsAvailable = available;
+        _isBiometricsEnabled = enabled;
+      });
+      if (available && enabled) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _triggerBiometricLogin();
+        });
       }
     }
   }
 
-  void _quickFill(String phone) {
-    setState(() {
-      _phoneController.text = phone;
-    });
+  Future<void> _triggerBiometricLogin() async {
+    final authenticated = await BiometricService.authenticate();
+    if (!authenticated) return;
+
+    final cachedUser = await BiometricService.getCachedUser();
+    if (cachedUser == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No cached user found. Please sign in with Google or Demo Shortcuts first.'),
+            backgroundColor: AppTheme.warning,
+          ),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      final auth = Provider.of<AuthProvider>(context, listen: false);
+      auth.loginWithCachedUser(cachedUser);
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Welcome back, ${cachedUser.name}!'),
+          backgroundColor: AppTheme.success,
+        ),
+      );
+
+      Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+    }
+  }
+
+  Future<void> _handleDemoLogin(String roleKey) async {
+    final auth = Provider.of<AuthProvider>(context, listen: false);
+    await auth.loginAsMockUser(roleKey);
+    
+    if (mounted) {
+      if (auth.needsRegistration) {
+        Navigator.pushNamed(context, '/profile-setup');
+      } else {
+        Navigator.pushNamedAndRemoveUntil(context, '/home', (route) => false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
-    final appState = Provider.of<AppStateProvider>(context);
 
     Widget buildForm() {
       return Form(
@@ -89,50 +120,10 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Enter your phone number to receive a verification OTP code.',
+              'Choose a secure authentication method to access your console.',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             const SizedBox(height: 32),
-            CustomTextField(
-              controller: _phoneController,
-              labelText: 'Phone Number',
-              hintText: '+1 555-0199',
-              prefixIcon: Icons.phone_android_rounded,
-              keyboardType: TextInputType.phone,
-              validator: (val) {
-                if (val == null || val.isEmpty) return 'Phone number is required';
-                if (!val.startsWith('+')) return 'Include country code (e.g. +1)';
-                if (val.length < 9) return 'Enter a valid phone number';
-                return null;
-              },
-            ),
-            const SizedBox(height: 24),
-            Consumer<AuthProvider>(
-              builder: (context, auth, _) {
-                return CustomButton(
-                  text: 'Send Verification Code',
-                  onPressed: _handleSendOtp,
-                  isLoading: auth.isLoading,
-                );
-              },
-            ),
-            
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: Text(
-                    'OR',
-                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
-              ],
-            ),
-            
-            const SizedBox(height: 24),
             Consumer<AuthProvider>(
               builder: (context, auth, _) {
                 return ElevatedButton.icon(
@@ -158,75 +149,104 @@ class _LoginScreenState extends State<LoginScreen> {
                   icon: const Icon(Icons.account_circle_rounded),
                   label: const Text('Sign in with Google'),
                   style: ElevatedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 56),
                     backgroundColor: Colors.white,
                     foregroundColor: const Color(0xFF1F2937),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     disabledBackgroundColor: Colors.grey,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 );
               },
             ),
-            
-            if (!appState.isFirebaseInitialized) ...[
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text(
-                      'DEMO SHORTCUTS',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.bold),
-                    ),
+            if (_isBiometricsAvailable && _isBiometricsEnabled) ...[
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _triggerBiometricLogin,
+                icon: const Icon(Icons.fingerprint_rounded, color: AppTheme.accentLight, size: 24),
+                label: const Text(
+                  'Sign In with Fingerprint',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.5,
                   ),
-                  Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                alignment: WrapAlignment.center,
-                children: [
-                  OutlinedButton.icon(
-                    onPressed: () => _quickFill('+15551111111'),
-                    icon: Icon(Icons.supervisor_account_outlined, size: 16, color: AppTheme.accentLight),
-                    label: const Text('Parent Demo', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: Size.zero,
-                    ),
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 56),
+                  side: BorderSide(color: AppTheme.accentLight.withOpacity(0.5), width: 1.5),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  OutlinedButton.icon(
-                    onPressed: () => _quickFill('+15552222222'),
-                    icon: Icon(Icons.directions_bus_outlined, size: 16, color: AppTheme.primaryLight),
-                    label: const Text('Driver Demo', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _quickFill('+15553333333'),
-                    icon: Icon(Icons.support_agent_rounded, size: 16, color: Colors.purpleAccent),
-                    label: const Text('Assistant Demo', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () => _quickFill('+15559999999'),
-                    icon: Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.orangeAccent),
-                    label: const Text('New Register', style: TextStyle(fontSize: 12)),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: Size.zero,
-                    ),
-                  ),
-                ],
+                  foregroundColor: AppTheme.textPrimary,
+                ),
               ),
             ],
+            
+            const SizedBox(height: 32),
+            Row(
+              children: [
+                Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                  child: Text(
+                    'DEMO SHORTCUTS',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Expanded(child: Divider(color: Colors.white.withOpacity(0.1))),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Consumer<AuthProvider>(
+              builder: (context, auth, _) {
+                return Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  alignment: WrapAlignment.center,
+                  children: [
+                    OutlinedButton.icon(
+                      onPressed: auth.isLoading ? null : () => _handleDemoLogin('parent'),
+                      icon: Icon(Icons.supervisor_account_outlined, size: 16, color: AppTheme.accentLight),
+                      label: const Text('Parent Demo', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: auth.isLoading ? null : () => _handleDemoLogin('driver'),
+                      icon: Icon(Icons.directions_bus_outlined, size: 16, color: AppTheme.primaryLight),
+                      label: const Text('Driver Demo', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: auth.isLoading ? null : () => _handleDemoLogin('assistant'),
+                      icon: Icon(Icons.support_agent_rounded, size: 16, color: Colors.purpleAccent),
+                      label: const Text('Assistant Demo', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: auth.isLoading ? null : () => _handleDemoLogin('new'),
+                      icon: Icon(Icons.person_add_alt_1_rounded, size: 16, color: Colors.orangeAccent),
+                      label: const Text('New Register', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        minimumSize: Size.zero,
+                      ),
+                    ),
+                  ],
+                );
+              }
+            ),
           ],
         ),
       );

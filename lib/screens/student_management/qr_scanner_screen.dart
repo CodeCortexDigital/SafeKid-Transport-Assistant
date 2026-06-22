@@ -29,13 +29,17 @@ class QrScannerScreen extends StatefulWidget {
 class _QrScannerScreenState extends State<QrScannerScreen> {
   ScanEventType _selectedEventType = ScanEventType.pickup;
   bool _isProcessing = false;
+  bool _useManualEntry = false;
+  bool _showScanner = false;
   StudentModel? _lastScannedStudent;
   ScanEventType? _lastScannedType;
   final MobileScannerController _scannerController = MobileScannerController();
+  final TextEditingController _manualEntryController = TextEditingController();
 
   @override
   void dispose() {
     _scannerController.dispose();
+    _manualEntryController.dispose();
     super.dispose();
   }
 
@@ -78,6 +82,61 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
   }
 
+  bool _isToday(DateTime? dt) {
+    if (dt == null) return false;
+    final now = DateTime.now();
+    return dt.year == now.year && dt.month == now.month && dt.day == now.day;
+  }
+
+  bool _isMorningPickupPhase(StudentModel student) {
+    return student.status == StudentStatus.home && !_isToday(student.lastCheckOut);
+  }
+
+  bool _isMorningInTransit(StudentModel student) {
+    return student.status == StudentStatus.inTransit && !_isToday(student.lastCheckIn);
+  }
+
+  bool _isAtSchoolPhase(StudentModel student) {
+    return student.status == StudentStatus.atSchool;
+  }
+
+  bool _isAfternoonInTransit(StudentModel student) {
+    return student.status == StudentStatus.inTransit && _isToday(student.lastCheckIn);
+  }
+
+  bool _isDroppedHomePhase(StudentModel student) {
+    return student.status == StudentStatus.home && _isToday(student.lastCheckOut);
+  }
+
+  String _getEventRatioString(List<StudentModel> students, ScanEventType eventType) {
+    final activeStudents = students.where((s) => s.status != StudentStatus.absent).toList();
+    if (activeStudents.isEmpty) return '0/0';
+
+    int completed = 0;
+    int total = 0;
+
+    switch (eventType) {
+      case ScanEventType.pickup:
+        total = activeStudents.length;
+        completed = activeStudents.where((s) => !_isMorningPickupPhase(s)).length;
+        break;
+      case ScanEventType.schoolArrival:
+        total = activeStudents.where((s) => !_isMorningPickupPhase(s)).length;
+        completed = activeStudents.where((s) => _isAtSchoolPhase(s) || _isAfternoonInTransit(s) || _isDroppedHomePhase(s)).length;
+        break;
+      case ScanEventType.schoolDeparture:
+        total = activeStudents.length;
+        completed = activeStudents.where((s) => _isAfternoonInTransit(s) || _isDroppedHomePhase(s)).length;
+        break;
+      case ScanEventType.homeDrop:
+        total = activeStudents.where((s) => _isAfternoonInTransit(s) || _isDroppedHomePhase(s)).length;
+        completed = activeStudents.where((s) => _isDroppedHomePhase(s)).length;
+        break;
+    }
+
+    return '$completed/$total';
+  }
+
   // --- LOGIC: PROCESS SCANNED CODE ---
   Future<void> _processQrCode(String qrData) async {
     if (_isProcessing) return;
@@ -97,6 +156,10 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
       // 2. Fetch Student details to verify existence
       final student = await appState.studentRepository.getStudentDetails(studentId);
+
+      if (student.status == StudentStatus.absent) {
+        throw 'Student is marked as on leave/absent today.';
+      }
 
       // 3. Fetch GPS coordinate
       double lat = AppConstants.defaultSchoolLatitude;
@@ -129,10 +192,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
       // 6. Refresh locally
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user?.role == UserRole.parent) {
-        await attendance.fetchMyStudents(user!.id);
+        await attendance.fetchMyStudents(user!.id, parentPhone: user.phone);
       } else {
-        await attendance.fetchMyStudents('mock-parent-uid-123');
+        await attendance.fetchAllStudents();
       }
+
+      // Auto-advance tab if current stage is fully completed
+      _checkAndAutoAdvanceTab(attendance.myStudents);
 
       // 7. Update Scanned state
       setState(() {
@@ -181,33 +247,163 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
     }
   }
 
-  Widget _buildScannerStudentTile(BuildContext context, StudentModel student) {
-    Color statusColor = AppTheme.success;
-    String statusLabel = 'At Home';
-    IconData statusIcon = Icons.home_rounded;
+  Color _getStudentColorForEvent(StudentModel student, ScanEventType eventType) {
+    if (student.status == StudentStatus.absent) {
+      return AppTheme.error;
+    }
+    switch (eventType) {
+      case ScanEventType.pickup:
+        if (student.status == StudentStatus.inTransit || student.status == StudentStatus.atSchool) {
+          return AppTheme.success;
+        } else if (student.status == StudentStatus.home) {
+          return AppTheme.warning;
+        }
+        return AppTheme.textMuted;
+      case ScanEventType.schoolArrival:
+        if (student.status == StudentStatus.atSchool) {
+          return AppTheme.success;
+        } else if (student.status == StudentStatus.inTransit) {
+          return AppTheme.warning;
+        }
+        return AppTheme.textMuted;
+      case ScanEventType.schoolDeparture:
+        if (student.status == StudentStatus.inTransit || student.status == StudentStatus.home) {
+          return AppTheme.success;
+        } else if (student.status == StudentStatus.atSchool) {
+          return AppTheme.warning;
+        }
+        return AppTheme.textMuted;
+      case ScanEventType.homeDrop:
+        if (student.status == StudentStatus.home) {
+          return AppTheme.success;
+        } else if (student.status == StudentStatus.inTransit) {
+          return AppTheme.warning;
+        }
+        return AppTheme.textMuted;
+    }
+  }
 
-    switch (student.status) {
-      case StudentStatus.home:
-        statusColor = AppTheme.success;
-        statusLabel = 'At Home';
-        statusIcon = Icons.home_rounded;
+  String _getStudentStatusLabelForEvent(StudentModel student, ScanEventType eventType) {
+    if (student.status == StudentStatus.absent) {
+      return 'On Leave';
+    }
+    switch (eventType) {
+      case ScanEventType.pickup:
+        if (student.status == StudentStatus.inTransit || student.status == StudentStatus.atSchool) {
+          return 'Picked Up';
+        } else if (student.status == StudentStatus.home) {
+          return student.isStudentReady ? 'Ready' : 'Waiting';
+        }
+        return 'Waiting';
+      case ScanEventType.schoolArrival:
+        if (student.status == StudentStatus.atSchool) {
+          return 'Reached School';
+        } else if (student.status == StudentStatus.inTransit) {
+          return 'Onboard';
+        }
+        return 'Waiting';
+      case ScanEventType.schoolDeparture:
+        if (student.status == StudentStatus.inTransit || student.status == StudentStatus.home) {
+          return 'Picked Up';
+        } else if (student.status == StudentStatus.atSchool) {
+          return 'Reached School';
+        }
+        return 'Reached School';
+      case ScanEventType.homeDrop:
+        if (student.status == StudentStatus.home) {
+          return 'Dropped Home';
+        } else if (student.status == StudentStatus.inTransit) {
+          return 'Onboard';
+        }
+        return 'Onboard';
+    }
+  }
+
+  void _checkAndAutoAdvanceTab(List<StudentModel> students) {
+    final activeStudents = students.where((s) => s.status != StudentStatus.absent).toList();
+    if (activeStudents.isEmpty) return;
+
+    bool isCurrentTabComplete = false;
+    switch (_selectedEventType) {
+      case ScanEventType.pickup:
+        isCurrentTabComplete = activeStudents.where((s) => _isMorningPickupPhase(s)).isEmpty;
         break;
-      case StudentStatus.inTransit:
-        statusColor = AppTheme.warning;
-        statusLabel = 'In Transit';
-        statusIcon = Icons.directions_bus_rounded;
+      case ScanEventType.schoolArrival:
+        final boarded = activeStudents.where((s) => !_isMorningPickupPhase(s)).toList();
+        isCurrentTabComplete = boarded.isNotEmpty && boarded.where((s) => _isMorningInTransit(s)).isEmpty;
         break;
-      case StudentStatus.atSchool:
-        statusColor = AppTheme.primaryLight;
-        statusLabel = 'At School';
-        statusIcon = Icons.school_rounded;
+      case ScanEventType.schoolDeparture:
+        isCurrentTabComplete = activeStudents.where((s) => _isAtSchoolPhase(s)).isEmpty;
         break;
-      case StudentStatus.absent:
-        statusColor = AppTheme.error;
-        statusLabel = 'Absent';
-        statusIcon = Icons.cancel_rounded;
+      case ScanEventType.homeDrop:
+        final departed = activeStudents.where((s) => _isAfternoonInTransit(s) || _isDroppedHomePhase(s)).toList();
+        isCurrentTabComplete = departed.isNotEmpty && departed.where((s) => _isAfternoonInTransit(s)).isEmpty;
         break;
     }
+
+    if (isCurrentTabComplete) {
+      ScanEventType? nextType;
+      if (_selectedEventType == ScanEventType.pickup) {
+        nextType = ScanEventType.schoolArrival;
+      } else if (_selectedEventType == ScanEventType.schoolArrival) {
+        nextType = ScanEventType.schoolDeparture;
+      } else if (_selectedEventType == ScanEventType.schoolDeparture) {
+        nextType = ScanEventType.homeDrop;
+      }
+
+      if (nextType != null) {
+        setState(() {
+          _selectedEventType = nextType!;
+        });
+        
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.swap_horiz_rounded, color: Colors.white),
+                const SizedBox(width: 8),
+                Text('All students completed! Shifting to ${_getEventLabel(nextType)}'),
+              ],
+            ),
+            backgroundColor: AppTheme.primaryColor,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
+  List<StudentModel> _getFilteredStudentsForTab(List<StudentModel> students, ScanEventType tabType) {
+    final activeStudents = students.where((s) => s.status != StudentStatus.absent).toList();
+
+    switch (tabType) {
+      case ScanEventType.pickup:
+        return activeStudents.where((s) => _isMorningPickupPhase(s)).toList();
+      case ScanEventType.schoolArrival:
+        return activeStudents.where((s) => _isMorningInTransit(s)).toList();
+      case ScanEventType.schoolDeparture:
+        return activeStudents.where((s) => _isAtSchoolPhase(s)).toList();
+      case ScanEventType.homeDrop:
+        return activeStudents.where((s) => _isAfternoonInTransit(s)).toList();
+    }
+  }
+
+  Widget _buildScannerStudentTile(BuildContext context, StudentModel student) {
+    final statusColor = _getStudentColorForEvent(student, _selectedEventType);
+    final statusLabel = _getStudentStatusLabelForEvent(student, _selectedEventType);
+    
+    IconData statusIcon = Icons.hourglass_empty_rounded;
+    if (statusColor == AppTheme.success) {
+      statusIcon = Icons.check_circle_outline_rounded;
+    } else if (statusColor == AppTheme.error) {
+      statusIcon = Icons.cancel_rounded;
+    } else if (statusColor == AppTheme.textMuted) {
+      statusIcon = Icons.remove_circle_outline_rounded;
+    }
+
+    final actionText = (_selectedEventType == ScanEventType.pickup || _selectedEventType == ScanEventType.schoolDeparture)
+        ? 'Board'
+        : 'Drop';
 
     return Container(
       decoration: BoxDecoration(
@@ -215,40 +411,95 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
       ),
-      child: ListTile(
-        onTap: () => _showScannerStudentDetailsDialog(context, student),
-        leading: CircleAvatar(
-          backgroundColor: statusColor.withOpacity(0.12),
-          radius: 18,
-          child: Icon(statusIcon, color: statusColor, size: 16),
-        ),
-        title: Row(
-          children: [
-            Expanded(
-              child: Text(
-                student.name,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                width: 6,
+                color: statusColor,
               ),
-            ),
-            if (student.hasCustomTimings) ...[
-              const Icon(Icons.alarm_rounded, size: 14, color: AppTheme.accentLight),
-              const SizedBox(width: 4),
+              Expanded(
+                child: ListTile(
+                  onTap: () async {
+                    if (_useManualEntry) {
+                      if (!_isProcessing) {
+                        final color = _getStudentColorForEvent(student, _selectedEventType);
+                        if (color == AppTheme.warning) {
+                          await _processQrCode('${student.id}|${student.name}');
+                        }
+                      }
+                    } else {
+                      _showScannerStudentDetailsDialog(context, student);
+                    }
+                  },
+                  leading: CircleAvatar(
+                    backgroundColor: statusColor.withOpacity(0.12),
+                    radius: 18,
+                    child: Icon(statusIcon, color: statusColor, size: 16),
+                  ),
+                  title: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          student.name,
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (student.isStudentReady) ...[
+                        const Icon(Icons.check_circle_rounded, size: 16, color: AppTheme.success),
+                        const SizedBox(width: 6),
+                      ],
+                      if (student.status == StudentStatus.absent) ...[
+                        const Icon(Icons.cancel_rounded, size: 16, color: AppTheme.error),
+                        const SizedBox(width: 6),
+                      ],
+                      if (student.hasCustomTimings) ...[
+                        const Icon(Icons.alarm_rounded, size: 14, color: AppTheme.accentLight),
+                        const SizedBox(width: 4),
+                      ],
+                    ],
+                  ),
+                  subtitle: Text(
+                    '${student.schoolName} • Class ${student.className}',
+                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
+                  trailing: _useManualEntry && statusColor == AppTheme.warning
+                      ? ElevatedButton(
+                          onPressed: _isProcessing
+                              ? null
+                              : () async {
+                                  await _processQrCode('${student.id}|${student.name}');
+                                },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryColor,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                          child: Text(
+                            actionText,
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      : Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: statusColor.withOpacity(0.15),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            statusLabel,
+                            style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                ),
+              ),
             ],
-          ],
-        ),
-        subtitle: Text(
-          '${student.schoolName} • Class ${student.className}',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 11),
-        ),
-        trailing: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(
-            color: statusColor.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Text(
-            statusLabel,
-            style: TextStyle(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
           ),
         ),
       ),
@@ -361,6 +612,31 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 ),
                 const SizedBox(height: 16),
 
+                // Readiness Alert Section
+                if (student.isStudentReady) ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.success.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.success.withOpacity(0.2), width: 1),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.check_circle_outline_rounded, color: AppTheme.success, size: 20),
+                        SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Child is ready at the gate for pickup',
+                            style: TextStyle(color: AppTheme.success, fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+
                 // Custom Timings Row
                 if (student.hasCustomTimings) ...[
                   Container(
@@ -468,12 +744,13 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
 
     // Filter list for simulation manual options
     final students = attendance.myStudents;
+    final filteredStudents = _getFilteredStudentsForTab(students, _selectedEventType);
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: AppTheme.surfaceColor,
         title: const Text(
-          'QR Transit Scanner',
+          'Transit Pick/Drop',
           style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
       ),
@@ -489,23 +766,8 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
                 style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
               ),
               const SizedBox(height: 8),
-              _buildEventTypeSelector(),
-              const SizedBox(height: 20),
-
-              // Camera Frame or Simulation Card
-              SizedBox(
-                height: 230,
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Container(
-                    color: AppTheme.surfaceColor,
-                    child: kIsWeb || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS
-                        ? _buildSimulationPanel(students)
-                        : _buildScannerCamera(context),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
+              _buildEventTypeSelector(students),
+              const SizedBox(height: 16),
 
               // Route Students Header
               const Text(
@@ -514,23 +776,108 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               ),
               const SizedBox(height: 8),
 
-              // Route Students List
+              // Route Students List (Just after the 4 cards)
               Expanded(
-                child: students.isEmpty
-                    ? const Center(child: Text('No students registered on route', style: TextStyle(color: AppTheme.textSecondary)))
+                child: filteredStudents.isEmpty
+                    ? const Center(child: Text('No students pending action in this stage', style: TextStyle(color: AppTheme.textSecondary)))
                     : ListView.separated(
-                        itemCount: students.length,
+                        itemCount: filteredStudents.length,
                         separatorBuilder: (_, __) => const SizedBox(height: 8),
                         itemBuilder: (context, index) {
-                          final student = students[index];
+                          final student = filteredStudents[index];
                           return _buildScannerStudentTile(context, student);
                         },
                       ),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-              // Bottom Scan Summary
-              _buildScanSummaryCard(),
+              // Bottom Section: Mode Toggle + Panels + Summary
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // QR vs Manual Mode Toggle Switch
+                  _buildToggleSwitch(),
+                  const SizedBox(height: 12),
+
+                  // Camera Frame, Simulation Panel, or Manual Entry Panel
+                  _useManualEntry
+                      ? _buildManualEntryPanel()
+                      : (_showScanner
+                          ? Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                SizedBox(
+                                  height: 200,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(24),
+                                    child: Container(
+                                      color: AppTheme.surfaceColor,
+                                      child: kIsWeb || defaultTargetPlatform == TargetPlatform.windows || defaultTargetPlatform == TargetPlatform.macOS
+                                          ? _buildSimulationPanel(filteredStudents)
+                                          : _buildScannerCamera(context),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        _showScanner = false;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.videocam_off_rounded, size: 16, color: AppTheme.error),
+                                    label: const Text('Hide Scanner', style: TextStyle(color: AppTheme.error, fontSize: 12, fontWeight: FontWeight.bold)),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : Container(
+                              padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: AppTheme.cardColor.withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(Icons.qr_code_scanner_rounded, color: AppTheme.primaryLight, size: 20),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Camera Scanner is Hidden',
+                                        style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                      ),
+                                    ],
+                                  ),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      setState(() {
+                                        _showScanner = true;
+                                      });
+                                    },
+                                    icon: const Icon(Icons.videocam_rounded, size: 14),
+                                    label: const Text('Show Scanner', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.primaryColor,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )),
+                  const SizedBox(height: 12),
+
+                  // Bottom Scan Summary
+                  _buildScanSummaryCard(),
+                ],
+              ),
             ],
           ),
         ),
@@ -539,54 +886,73 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
   }
 
   // --- WIDGETS: EVENT SELECTOR ---
-  Widget _buildEventTypeSelector() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppTheme.cardColor,
-        borderRadius: BorderRadius.circular(16),
-      ),
+  Widget _buildEventTypeSelector(List<StudentModel> students) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
       child: Row(
         children: ScanEventType.values.map((type) {
           final isSelected = _selectedEventType == type;
-          return Expanded(
-            child: GestureDetector(
-              onTap: () {
-                setState(() {
-                  _selectedEventType = type;
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: isSelected ? AppTheme.primaryColor : Colors.transparent,
-                  borderRadius: BorderRadius.circular(12),
+          final ratioStr = _getEventRatioString(students, type);
+          
+          String title = 'Pickup';
+          if (type == ScanEventType.schoolArrival) title = 'Arrival';
+          if (type == ScanEventType.schoolDeparture) title = 'Depart';
+          if (type == ScanEventType.homeDrop) title = 'Drop';
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedEventType = type;
+              });
+            },
+            child: Container(
+              width: 90,
+              margin: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              decoration: BoxDecoration(
+                color: isSelected 
+                    ? AppTheme.primaryColor.withOpacity(0.85) 
+                    : AppTheme.cardColor.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isSelected ? AppTheme.accentLight.withOpacity(0.6) : Colors.white.withOpacity(0.06),
+                  width: 1.5,
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      _getEventIcon(type),
-                      color: isSelected ? Colors.white : AppTheme.textSecondary,
-                      size: 20,
+                boxShadow: isSelected ? [
+                  BoxShadow(
+                    color: AppTheme.primaryColor.withOpacity(0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
+                  )
+                ] : null,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _getEventIcon(type),
+                    color: isSelected ? Colors.white : AppTheme.textSecondary,
+                    size: 20,
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: isSelected ? Colors.white : AppTheme.textPrimary,
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      type.name == 'schoolArrival'
-                          ? 'Arrival'
-                          : type.name == 'schoolDeparture'
-                              ? 'Depart'
-                              : type.name == 'homeDrop'
-                                  ? 'Drop'
-                                  : 'Pickup',
-                      style: TextStyle(
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        color: isSelected ? Colors.white : AppTheme.textSecondary,
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    ratioStr,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: isSelected ? Colors.white70 : AppTheme.textSecondary,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           );
@@ -819,6 +1185,184 @@ class _QrScannerScreenState extends State<QrScannerScreen> {
               'SUCCESS',
               style: TextStyle(color: AppTheme.success, fontSize: 10, fontWeight: FontWeight.bold),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildToggleSwitch() {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _useManualEntry = false;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: !_useManualEntry ? AppTheme.primaryColor.withOpacity(0.85) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.qr_code_scanner_rounded,
+                      size: 16,
+                      color: !_useManualEntry ? Colors.white : AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'QR Scanner Mode',
+                      style: TextStyle(
+                         fontSize: 12,
+                         fontWeight: FontWeight.bold,
+                         color: !_useManualEntry ? Colors.white : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _useManualEntry = true;
+                });
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  color: _useManualEntry ? AppTheme.primaryColor.withOpacity(0.85) : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.keyboard_rounded,
+                      size: 16,
+                      color: _useManualEntry ? Colors.white : AppTheme.textSecondary,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Manual Mode',
+                      style: TextStyle(
+                         fontSize: 12,
+                         fontWeight: FontWeight.bold,
+                         color: _useManualEntry ? Colors.white : AppTheme.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildManualEntryPanel() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: AppTheme.cardColor.withOpacity(0.3),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withOpacity(0.04), width: 1),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.keyboard_rounded, color: AppTheme.primaryLight, size: 24),
+              SizedBox(width: 8),
+              Text(
+                'Manual Student Entry',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            'Enter the student ID or scan code manually to log the event:',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _manualEntryController,
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'e.g. mock-student-1',
+                    hintStyle: const TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                    filled: true,
+                    fillColor: AppTheme.cardColor,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withOpacity(0.05), width: 1),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: AppTheme.primaryLight, width: 1),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              ElevatedButton(
+                onPressed: _isProcessing
+                    ? null
+                    : () async {
+                        final text = _manualEntryController.text.trim();
+                        if (text.isNotEmpty) {
+                          _manualEntryController.clear();
+                          FocusScope.of(context).unfocus();
+                          await _processQrCode(text);
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Please enter a student ID'),
+                              backgroundColor: AppTheme.error,
+                            ),
+                          );
+                        }
+                      },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.primaryColor,
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _isProcessing
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text('Submit', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              ),
+            ],
           ),
         ],
       ),

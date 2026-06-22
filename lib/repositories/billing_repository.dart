@@ -21,4 +21,16 @@ class BillingRepository {
   Stream<List<BillingModel>> watchBillsForParents(List<String> parentIds) {
     return _firestoreService.streamBillingRecordsForParents(parentIds);
   }
+
+  Future<void> createBill(BillingModel bill) async {
+    await _firestoreService.createBillingRecord(bill);
+  }
+
+  Future<void> updateBill(BillingModel bill) async {
+    await _firestoreService.updateBillingRecord(bill);
+  }
+
+  Future<void> deleteBill(String billId) async {
+    await _firestoreService.deleteBillingRecord(billId);
+  }
 }

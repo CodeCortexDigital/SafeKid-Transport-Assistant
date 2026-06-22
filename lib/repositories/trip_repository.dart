@@ -20,6 +20,10 @@ class TripRepository {
     await _firestoreService.updateTripStatus(tripId, status);
   }
 
+  Future<void> updateRouteName(String tripId, String routeName) async {
+    await _firestoreService.updateTripRouteName(tripId, routeName);
+  }
+
   Stream<TripModel> watchTrip(String tripId) {
     return _firestoreService.streamTrip(tripId);
   }

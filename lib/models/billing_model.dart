@@ -1,6 +1,7 @@
 class BillingModel {
   final String id;
   final String parentId;
+  final String studentId;
   final double amount;
   final String status; // paid, unpaid, pending
   final DateTime billingDate;
@@ -10,6 +11,7 @@ class BillingModel {
   BillingModel({
     required this.id,
     required this.parentId,
+    required this.studentId,
     required this.amount,
     required this.status,
     required this.billingDate,
@@ -21,6 +23,7 @@ class BillingModel {
     return BillingModel(
       id: docId,
       parentId: json['parentId'] ?? '',
+      studentId: json['studentId'] ?? '',
       amount: (json['amount'] as num?)?.toDouble() ?? 0.0,
       status: json['status'] ?? 'pending',
       billingDate: json['billingDate'] != null
@@ -36,6 +39,7 @@ class BillingModel {
   Map<String, dynamic> toJson() {
     return {
       'parentId': parentId,
+      'studentId': studentId,
       'amount': amount,
       'status': status,
       'billingDate': billingDate.toIso8601String(),
@@ -47,6 +51,7 @@ class BillingModel {
   BillingModel copyWith({
     String? id,
     String? parentId,
+    String? studentId,
     double? amount,
     String? status,
     DateTime? billingDate,
@@ -56,6 +61,7 @@ class BillingModel {
     return BillingModel(
       id: id ?? this.id,
       parentId: parentId ?? this.parentId,
+      studentId: studentId ?? this.studentId,
       amount: amount ?? this.amount,
       status: status ?? this.status,
       billingDate: billingDate ?? this.billingDate,

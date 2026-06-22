@@ -64,6 +64,21 @@ class LocationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Updates the active route name for a trip
+  Future<void> updateRouteName(String tripId, String routeName) async {
+    _errorMessage = null;
+    try {
+      await _tripRepository.updateRouteName(tripId, routeName);
+      if (_currentTrip != null && _currentTrip!.id == tripId) {
+        _currentTrip = _currentTrip!.copyWith(routeName: routeName);
+        notifyListeners();
+      }
+    } catch (e) {
+      _errorMessage = e.toString();
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     _tripSubscription?.cancel();

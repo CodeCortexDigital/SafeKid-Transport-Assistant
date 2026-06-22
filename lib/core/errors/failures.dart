@@ -19,7 +19,7 @@ class CacheFailure extends Failure {
 }
 
 class NetworkFailure extends Failure {
-  const NetworkFailure([String message = 'No Internet Connection. Please check your network settings.']) : super(message);
+  const NetworkFailure([super.message = 'No Internet Connection. Please check your network settings.']);
 }
 
 class LocationFailure extends Failure {

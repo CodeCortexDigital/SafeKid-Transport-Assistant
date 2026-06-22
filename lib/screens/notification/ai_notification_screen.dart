@@ -28,7 +28,7 @@ class _AiNotificationScreenState extends State<AiNotificationScreen> {
 
   // Parameters controllers
   // 1. Van Delay
-  final _vanRouteController = TextEditingController(text: 'Greenwood Route 4B');
+  final _vanRouteController = TextEditingController(text: 'Greenwood Route 4B (Standard)');
   final _vanDelayController = TextEditingController(text: '15');
   final _vanReasonController = TextEditingController(text: 'heavy morning traffic');
 
@@ -65,9 +65,9 @@ class _AiNotificationScreenState extends State<AiNotificationScreen> {
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user != null) {
         if (user.role == UserRole.parent) {
-          Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id);
+          Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id, parentPhone: user.phone);
         } else {
-          Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents('mock-parent-uid-123');
+          Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents('mock-parent-uid-123', parentPhone: '');
         }
       }
     });

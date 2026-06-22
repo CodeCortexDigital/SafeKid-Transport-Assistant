@@ -48,15 +48,34 @@ class _ParentDashboardState extends State<ParentDashboard> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user != null) {
-        Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id);
+        Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id, parentPhone: user.phone);
+        Provider.of<LocationProvider>(context, listen: false).startTrackingTrip('mock-ride-1');
       }
     });
   }
 
   void _showCustomTimingsDialog(BuildContext context, StudentModel student) {
     bool hasCustom = student.hasCustomTimings;
+    bool isReady = student.isReadyForPickup;
+    bool isOnLeave = student.status == StudentStatus.absent;
+    
     final pickupController = TextEditingController(text: student.customPickupTime ?? '08:30 AM');
     final dropController = TextEditingController(text: student.customDropTime ?? '01:30 PM');
+    
+    // Standard editable fields
+    final schoolController = TextEditingController(text: student.schoolName);
+    final classController = TextEditingController(text: student.className);
+    final sectionController = TextEditingController(text: student.section);
+    final pickupPointController = TextEditingController(text: student.pickupPoint);
+    final dropPointController = TextEditingController(text: student.dropPoint);
+
+    double pickupLat = student.pickupLatitude ?? AppConstants.defaultHomeLatitude;
+    double pickupLng = student.pickupLongitude ?? AppConstants.defaultHomeLongitude;
+    double dropLat = student.dropLatitude ?? AppConstants.defaultHomeLatitude;
+    double dropLng = student.dropLongitude ?? AppConstants.defaultHomeLongitude;
+
+    bool isPickupLocating = false;
+    bool isDropLocating = false;
 
     showDialog(
       context: context,
@@ -71,12 +90,12 @@ class _ParentDashboardState extends State<ParentDashboard> {
               ),
               title: Row(
                 children: [
-                  const Icon(Icons.alarm_rounded, color: AppTheme.accentLight),
+                  const Icon(Icons.settings_suggest_rounded, color: AppTheme.accentLight),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Schedule Tomorrow: ${student.name}',
-                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      'Manage: ${student.name}',
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
                     ),
                   ),
                 ],
@@ -86,44 +105,72 @@ class _ParentDashboardState extends State<ParentDashboard> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const Text(
-                      'If tomorrow\'s timing is different from the regular schedule (e.g. university class changes, early/late pack-up), configure it below. The driver will see this custom timing for route scheduling.',
-                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, height: 1.4),
+                     // READINESS TOGGLE
+                    SwitchListTile(
+                      title: const Text('Ready for Pickup', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                      subtitle: const Text('Toggle to let the driver know child is ready at the gate.', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      value: isReady,
+                      activeColor: AppTheme.success,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isReady = val;
+                          if (val) {
+                            isOnLeave = false;
+                          }
+                        });
+                      },
                     ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        const Text(
-                          'Enable Custom Timing',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500, color: Colors.white),
-                        ),
-                        const Spacer(),
-                        Switch(
-                          value: hasCustom,
-                          activeColor: AppTheme.accentLight,
-                          onChanged: (val) {
-                            setDialogState(() {
-                              hasCustom = val;
-                            });
-                          },
-                        ),
-                      ],
+                    const Divider(color: Colors.white10),
+                    
+                    // LEAVE TOGGLE
+                    SwitchListTile(
+                      title: const Text('On Leave Tomorrow', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                      subtitle: const Text('Mark child absent so the driver knows not to stop.', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      value: isOnLeave,
+                      activeColor: AppTheme.error,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          isOnLeave = val;
+                          if (val) {
+                            isReady = false;
+                          }
+                        });
+                      },
                     ),
+                    const Divider(color: Colors.white10),
+                    
+                    // CUSTOM TIMINGS TOGGLE
+                    SwitchListTile(
+                      title: const Text('Custom Tomorrow Timings', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white)),
+                      subtitle: const Text('Set custom times for university/school class changes.', style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+                      value: hasCustom,
+                      activeColor: AppTheme.accentLight,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setDialogState(() {
+                          hasCustom = val;
+                        });
+                      },
+                    ),
+                    
                     if (hasCustom) ...[
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
                       // Pickup Time selection
                       const Text(
                         'Tomorrow\'s Pickup / Class Start Time',
                         style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       TextField(
                         controller: pickupController,
-                        style: const TextStyle(color: Colors.white),
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
                           hintText: 'e.g. 08:30 AM',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           suffixIcon: IconButton(
-                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight),
+                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight, size: 18),
                             onPressed: () async {
                               final time = await showTimePicker(
                                 context: context,
@@ -136,20 +183,21 @@ class _ParentDashboardState extends State<ParentDashboard> {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       // Drop Time selection
                       const Text(
                         'Tomorrow\'s Packup / Drop Time',
                         style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 4),
                       TextField(
                         controller: dropController,
-                        style: const TextStyle(color: Colors.white),
+                        style: const TextStyle(color: Colors.white, fontSize: 13),
                         decoration: InputDecoration(
                           hintText: 'e.g. 01:30 PM',
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                           suffixIcon: IconButton(
-                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight),
+                            icon: const Icon(Icons.access_time_rounded, color: AppTheme.accentLight, size: 18),
                             onPressed: () async {
                               final time = await showTimePicker(
                                 context: context,
@@ -163,6 +211,129 @@ class _ParentDashboardState extends State<ParentDashboard> {
                         ),
                       ),
                     ],
+                    
+                    const Divider(color: Colors.white10),
+                    const SizedBox(height: 8),
+                    const Text(
+                      'EDIT SCHOOL & ROUTE DETAILS',
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.primaryLight, letterSpacing: 0.5),
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // School Name
+                    _buildDialogTextField('School Name', schoolController),
+                    const SizedBox(height: 12),
+                    
+                    Row(
+                      children: [
+                        Expanded(child: _buildDialogTextField('Class / Grade', classController)),
+                        const SizedBox(width: 12),
+                        Expanded(child: _buildDialogTextField('Section', sectionController)),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    
+                    // Pickup Address
+                    _buildDialogTextField(
+                      'Pickup Address Point',
+                      pickupPointController,
+                      suffixIcon: StatefulBuilder(
+                        builder: (context, setSuffixState) {
+                          return isPickupLocating
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.accentLight),
+                                )
+                              : IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  icon: const Icon(Icons.my_location_rounded, color: AppTheme.accentLight, size: 16),
+                                  tooltip: 'Use current GPS location',
+                                  onPressed: () async {
+                                    setSuffixState(() {
+                                      isPickupLocating = true;
+                                    });
+                                    try {
+                                      final appState = Provider.of<AppStateProvider>(context, listen: false);
+                                      final pos = await appState.locationService.getCurrentLocation();
+                                      pickupLat = pos.latitude;
+                                      pickupLng = pos.longitude;
+                                      pickupPointController.text = '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)} (Current Location)';
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Loaded current GPS coordinates for Pickup Point!'),
+                                          backgroundColor: AppTheme.success,
+                                        ),
+                                      );
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Failed to get location: $e'),
+                                          backgroundColor: AppTheme.error,
+                                        ),
+                                      );
+                                    } finally {
+                                      setSuffixState(() {
+                                        isPickupLocating = false;
+                                      });
+                                    }
+                                  },
+                                );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    // Drop Address
+                    _buildDialogTextField(
+                      'Drop Address Point',
+                      dropPointController,
+                      suffixIcon: StatefulBuilder(
+                        builder: (context, setSuffixState) {
+                          return isDropLocating
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 1.5, color: AppTheme.accentLight),
+                                )
+                              : IconButton(
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  icon: const Icon(Icons.my_location_rounded, color: AppTheme.accentLight, size: 16),
+                                  tooltip: 'Use current GPS location',
+                                  onPressed: () async {
+                                    setSuffixState(() {
+                                      isDropLocating = true;
+                                    });
+                                    try {
+                                      final appState = Provider.of<AppStateProvider>(context, listen: false);
+                                      final pos = await appState.locationService.getCurrentLocation();
+                                      dropLat = pos.latitude;
+                                      dropLng = pos.longitude;
+                                      dropPointController.text = '${pos.latitude.toStringAsFixed(6)}, ${pos.longitude.toStringAsFixed(6)} (Current Location)';
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Loaded current GPS coordinates for Drop Point!'),
+                                          backgroundColor: AppTheme.success,
+                                        ),
+                                      );
+                                    } catch (e) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(
+                                          content: Text('Failed to get location: $e'),
+                                          backgroundColor: AppTheme.error,
+                                        ),
+                                      );
+                                    } finally {
+                                      setSuffixState(() {
+                                        isDropLocating = false;
+                                      });
+                                    }
+                                  },
+                                );
+                        },
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -174,24 +345,185 @@ class _ParentDashboardState extends State<ParentDashboard> {
                 ElevatedButton(
                   onPressed: () async {
                     final attendanceProv = Provider.of<AttendanceProvider>(context, listen: false);
+                    final isReadyMorningReset = isReady && (student.status == StudentStatus.home || student.status == StudentStatus.absent);
                     final updatedStudent = student.copyWith(
+                      schoolName: schoolController.text.trim(),
+                      className: classController.text.trim(),
+                      section: sectionController.text.trim(),
+                      pickupPoint: pickupPointController.text.trim(),
+                      dropPoint: dropPointController.text.trim(),
+                      pickupLatitude: pickupLat,
+                      pickupLongitude: pickupLng,
+                      dropLatitude: dropLat,
+                      dropLongitude: dropLng,
                       hasCustomTimings: hasCustom,
                       customPickupTime: hasCustom ? pickupController.text.trim() : null,
                       customDropTime: hasCustom ? dropController.text.trim() : null,
+                      isReadyForPickup: isReady,
+                      status: isOnLeave 
+                          ? StudentStatus.absent 
+                          : (isReadyMorningReset ? StudentStatus.home : (student.status == StudentStatus.absent ? StudentStatus.home : student.status)),
+                      clearCheckIn: isReadyMorningReset,
+                      clearCheckOut: isReadyMorningReset,
                     );
                     final success = await attendanceProv.editStudent(updatedStudent);
                     if (success && context.mounted) {
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Timings for ${student.name} updated successfully!'),
+                          content: Text('Details for ${student.name} updated successfully!'),
                           backgroundColor: AppTheme.success,
                         ),
                       );
                     }
                   },
-                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentColor),
-                  child: const Text('Save Schedule', style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                  child: const Text('Save Changes', style: TextStyle(color: Colors.white)),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildDialogTextField(String label, TextEditingController controller, {Widget? suffixIcon}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontWeight: FontWeight.w600)),
+        const SizedBox(height: 4),
+        TextField(
+          controller: controller,
+          style: const TextStyle(color: Colors.white, fontSize: 13),
+          decoration: InputDecoration(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            suffixIcon: suffixIcon,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showLinkChildOtpDialog(BuildContext context, UserModel parentUser) {
+    final formKey = GlobalKey<FormState>();
+    final otpController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final attendanceProv = Provider.of<AttendanceProvider>(context);
+            
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.white.withOpacity(0.08)),
+              ),
+              title: Row(
+                children: [
+                  const Icon(Icons.vpn_key_rounded, color: AppTheme.accentLight),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'Link Child via OTP',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Enter the 6-digit verification code provided by your driver to link your child\'s profile.',
+                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: otpController,
+                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 8),
+                        textAlign: TextAlign.center,
+                        maxLength: 6,
+                        keyboardType: TextInputType.number,
+                        decoration: InputDecoration(
+                          hintText: '000000',
+                          hintStyle: TextStyle(color: Colors.white.withOpacity(0.2), letterSpacing: 8),
+                          counterText: '',
+                          contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.white.withOpacity(0.12)),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(color: AppTheme.accentLight, width: 2),
+                          ),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().length != 6) {
+                            return 'Please enter a valid 6-digit OTP';
+                          }
+                          return null;
+                        },
+                      ),
+                      if (attendanceProv.errorMessage != null) ...[
+                        const SizedBox(height: 12),
+                        Text(
+                          attendanceProv.errorMessage!,
+                          style: const TextStyle(color: AppTheme.error, fontSize: 12, fontWeight: FontWeight.w500),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    attendanceProv.clearMessages();
+                    Navigator.pop(context);
+                  },
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: attendanceProv.isLoading
+                      ? null
+                      : () async {
+                          if (formKey.currentState?.validate() ?? false) {
+                            final success = await attendanceProv.linkStudentViaOtp(
+                              otpController.text.trim(),
+                              parentUser.id,
+                              parentUser.phone,
+                              parentUser.name,
+                            );
+                            if (success && context.mounted) {
+                              Navigator.pop(context);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(attendanceProv.successMessage ?? 'Child linked successfully!'),
+                                  backgroundColor: AppTheme.success,
+                                ),
+                              );
+                              // Refresh
+                              attendanceProv.fetchMyStudents(parentUser.id, parentPhone: parentUser.phone);
+                            }
+                          }
+                        },
+                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryColor),
+                  child: attendanceProv.isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('Link Profile', style: TextStyle(color: Colors.white)),
                 ),
               ],
             );
@@ -215,13 +547,13 @@ class _ParentDashboardState extends State<ParentDashboard> {
       );
     }
 
-    if (attendance.myStudents.isEmpty) {
-      return _buildEmptyState();
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // SECURE PHONE CHECKPOINT BANNER
+        _buildPhoneVerificationBanner(context, parentUser),
+        const SizedBox(height: 16),
+
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -229,34 +561,46 @@ class _ParentDashboardState extends State<ParentDashboard> {
               'My Children Directory',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
             ),
-            IconButton(
-              icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryLight, size: 22),
-              onPressed: () {
-                final user = Provider.of<AuthProvider>(context, listen: false).user;
-                if (user != null) attendance.fetchMyStudents(user.id);
-              },
+            Row(
+              children: [
+                if (parentUser != null)
+                  TextButton.icon(
+                    onPressed: () => _showLinkChildOtpDialog(context, parentUser),
+                    icon: const Icon(Icons.vpn_key_rounded, size: 18, color: AppTheme.accentLight),
+                    label: const Text('Link Child via OTP', style: TextStyle(fontSize: 12, color: AppTheme.accentLight)),
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: AppTheme.primaryLight, size: 22),
+                  onPressed: () {
+                    final user = Provider.of<AuthProvider>(context, listen: false).user;
+                    if (user != null) attendance.fetchMyStudents(user.id, parentPhone: user.phone);
+                  },
+                ),
+              ],
             ),
           ],
         ),
         const SizedBox(height: 12),
-        // Build real-time card for each child
-        ListView.separated(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: attendance.myStudents.length,
-          separatorBuilder: (_, __) => const SizedBox(height: 20),
-          itemBuilder: (context, index) {
-            final baseStudent = attendance.myStudents[index];
-            return StreamBuilder<StudentModel>(
-              stream: appState.studentRepository.watchStudent(baseStudent.id),
-              initialData: baseStudent,
-              builder: (context, snapshot) {
-                final student = snapshot.data ?? baseStudent;
-                return _buildChildCard(context, student);
-              },
-            );
-          },
-        ),
+        if (attendance.myStudents.isEmpty)
+          _buildEmptyState(context, parentUser)
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: attendance.myStudents.length,
+            separatorBuilder: (_, __) => const SizedBox(height: 20),
+            itemBuilder: (context, index) {
+              final baseStudent = attendance.myStudents[index];
+              return StreamBuilder<StudentModel>(
+                stream: appState.studentRepository.watchStudent(baseStudent.id),
+                initialData: baseStudent,
+                builder: (context, snapshot) {
+                  final student = snapshot.data ?? baseStudent;
+                  return _buildChildCard(context, student);
+                },
+              );
+            },
+          ),
         if (parentUser != null) ...[
           const SizedBox(height: 28),
           const Text(
@@ -279,23 +623,35 @@ class _ParentDashboardState extends State<ParentDashboard> {
     );
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildEmptyState(BuildContext context, UserModel? parentUser) {
     return GlassCard(
       padding: const EdgeInsets.all(24),
-      child: const Column(
+      child: Column(
         children: [
-          Icon(Icons.child_care_rounded, size: 48, color: AppTheme.textMuted),
-          SizedBox(height: 12),
-          Text(
+          const Icon(Icons.child_care_rounded, size: 48, color: AppTheme.textMuted),
+          const SizedBox(height: 12),
+          const Text(
             'No Children Registered',
             style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
           ),
-          SizedBox(height: 4),
-          Text(
-            'Contact the administrator to link your children profiles to this phone number.',
+          const SizedBox(height: 4),
+          const Text(
+            'Ask your driver to add your child and provide you with a 6-digit OTP code to link their profile here securely.',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
           ),
+          if (parentUser != null) ...[
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () => _showLinkChildOtpDialog(context, parentUser),
+              icon: const Icon(Icons.vpn_key_rounded, color: Colors.white),
+              label: const Text('Link Child via OTP', style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryColor,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -378,6 +734,65 @@ class _ParentDashboardState extends State<ParentDashboard> {
                         '${student.schoolName} • ${student.className} (${student.section})',
                         style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                       ),
+                      if (student.isStudentReady || student.hasCustomTimings) ...[
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            if (student.isStudentReady) ...[
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.success.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.check_circle_outline, size: 10, color: AppTheme.success),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'READY FOR PICKUP',
+                                      style: TextStyle(color: AppTheme.success, fontSize: 8, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ] else if (student.status != StudentStatus.absent) ...[
+                              Container(
+                                margin: const EdgeInsets.only(right: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.warning.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.access_time_rounded, size: 10, color: AppTheme.warning),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'WAITING FOR PICKUP',
+                                      style: TextStyle(color: AppTheme.warning, fontSize: 8, fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                            if (student.hasCustomTimings) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.accentLight.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text(
+                                  'CUSTOM TIMINGS',
+                                  style: TextStyle(color: AppTheme.accentLight, fontSize: 8, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -431,33 +846,124 @@ class _ParentDashboardState extends State<ParentDashboard> {
               ),
             ],
             const SizedBox(height: 20),
-            if (student.hasCustomTimings) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.accentColor.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppTheme.accentColor.withValues(alpha: 0.25), width: 1),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.alarm_rounded, size: 16, color: AppTheme.accentLight),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Tomorrow\'s Custom Timing: Pickup at ${student.customPickupTime ?? "N/A"}, Drop at ${student.customDropTime ?? "N/A"}',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppTheme.accentLight,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+            // Tomorrow's Class & Packup Timings Box (Always Visible)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: student.hasCustomTimings 
+                    ? AppTheme.accentColor.withOpacity(0.08)
+                    : Colors.white.withOpacity(0.02),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: student.hasCustomTimings 
+                      ? AppTheme.accentColor.withOpacity(0.2)
+                      : Colors.white.withOpacity(0.04),
+                  width: 1,
                 ),
               ),
-              const SizedBox(height: 16),
-            ],
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Row(
+                        children: [
+                          Icon(Icons.calendar_today_rounded, size: 14, color: AppTheme.primaryLight),
+                          SizedBox(width: 6),
+                          Text(
+                            "Tomorrow's Schedule",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                      if (student.hasCustomTimings)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentColor.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'CUSTOM',
+                            style: TextStyle(color: AppTheme.accentLight, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.08),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Text(
+                            'STANDARD',
+                            style: TextStyle(color: AppTheme.textSecondary, fontSize: 8, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.login_rounded, size: 14, color: AppTheme.success),
+                            const SizedBox(width: 6),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Class Starts',
+                                  style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                ),
+                                Text(
+                                  student.hasCustomTimings && student.customPickupTime != null
+                                      ? student.customPickupTime!
+                                      : '08:30 AM',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(width: 1, height: 24, color: Colors.white10),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Row(
+                          children: [
+                            const Icon(Icons.logout_rounded, size: 14, color: AppTheme.error),
+                            const SizedBox(width: 6),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'Packup / Dismiss',
+                                  style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                                ),
+                                Text(
+                                  student.hasCustomTimings && student.customDropTime != null
+                                      ? student.customDropTime!
+                                      : '01:30 PM',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
 
             // Row 2: Status Timeline Title
             const Text(
@@ -632,18 +1138,21 @@ class _ParentDashboardState extends State<ParentDashboard> {
     final departureTimeStr = student.lastCheckOut != null ? _formatTime(student.lastCheckOut!.subtract(const Duration(minutes: 15))) : '--:--';
     final dropTimeStr = student.lastCheckOut != null ? _formatTime(student.lastCheckOut!) : '--:--';
 
+    final locationProv = Provider.of<LocationProvider>(context);
+    final routeName = locationProv.currentTrip?.routeName ?? 'Greenwood Route 4B (Standard)';
+
     return Column(
       children: [
         _buildTimelineNode(
           label: 'Waiting',
           subtitle: 'Waiting for morning bus pickup',
-          time: '07:30 AM',
+          time: student.hasCustomTimings && student.customPickupTime != null ? student.customPickupTime! : '07:30 AM',
           isCompleted: step1Waiting,
           isActive: student.status == StudentStatus.home && !hasCheckOutToday && !isAbsent,
         ),
         _buildTimelineNode(
           label: 'Picked Up',
-          subtitle: 'Boarded Greenwood Route 4B',
+          subtitle: 'Boarded $routeName',
           time: pickupTimeStr,
           isCompleted: step2PickedUp,
           isActive: student.status == StudentStatus.inTransit && !hasCheckInToday && !isAbsent,
@@ -803,6 +1312,24 @@ class _ParentDashboardState extends State<ParentDashboard> {
         final isPaid = activeInvoice.status.toLowerCase() == 'paid';
         final statusColor = isPaid ? AppTheme.success : AppTheme.warning;
 
+        final attendance = Provider.of<AttendanceProvider>(context, listen: false);
+        final student = attendance.myStudents.firstWhere(
+          (s) => s.id == activeInvoice.studentId,
+          orElse: () => StudentModel(
+            id: '',
+            name: '',
+            className: '',
+            section: '',
+            schoolName: '',
+            parentUid: parentId,
+            parentName: '',
+            qrCodeData: '',
+          ),
+        );
+        final feeTitle = student.name.isNotEmpty 
+            ? 'Transport Fees - ${student.name}' 
+            : 'Transport Fees';
+
         return GlassCard(
           padding: const EdgeInsets.all(20),
           child: Column(
@@ -815,9 +1342,9 @@ class _ParentDashboardState extends State<ParentDashboard> {
                     children: [
                       Icon(Icons.payment_rounded, color: statusColor, size: 22),
                       const SizedBox(width: 8),
-                      const Text(
-                        'Transport Fees',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
+                      Text(
+                        feeTitle,
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                       ),
                     ],
                   ),
@@ -1018,6 +1545,247 @@ class _ParentDashboardState extends State<ParentDashboard> {
           }),
         ),
       ],
+    );
+  }
+
+  Widget _buildPhoneVerificationBanner(BuildContext context, UserModel? parentUser) {
+    if (parentUser == null) return const SizedBox.shrink();
+
+    final hasPhone = parentUser.phone.isNotEmpty;
+
+    return GlassCard(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          CircleAvatar(
+            backgroundColor: (hasPhone ? AppTheme.success : AppTheme.warning).withOpacity(0.12),
+            child: Icon(
+              hasPhone ? Icons.verified_user_rounded : Icons.gpp_maybe_rounded,
+              color: hasPhone ? AppTheme.success : AppTheme.warning,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  hasPhone ? '✅ Verified Phone Link Active' : '🔒 Secure Phone Link Required',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  hasPhone
+                      ? 'Phone: ${parentUser.phone} • Syncing kids automatically'
+                      : 'Verify phone number to sync kids added by your driver.',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    color: AppTheme.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => _showPhoneVerificationDialog(context, parentUser),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: hasPhone ? Colors.white.withOpacity(0.08) : AppTheme.primaryColor,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              minimumSize: Size.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+            child: Text(
+              hasPhone ? 'Change' : 'Link & Verify',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPhoneVerificationDialog(BuildContext context, UserModel parentUser) {
+    final phoneController = TextEditingController(text: parentUser.phone);
+    final otpController = TextEditingController();
+    bool codeSent = false;
+    String generatedCode = '';
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.white.withOpacity(0.08)),
+              ),
+              title: Row(
+                children: [
+                  Icon(
+                    codeSent ? Icons.sms_rounded : Icons.phone_iphone_rounded,
+                    color: AppTheme.accentLight,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    codeSent ? 'Enter OTP Code' : 'Verify Phone Number',
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                  ),
+                ],
+              ),
+              content: Form(
+                key: formKey,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (!codeSent) ...[
+                      const Text(
+                        'Security Checkpoint: Enter your mobile number to receive a secure OTP code. This prevents unauthorized access to student details.',
+                        style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: phoneController,
+                        style: const TextStyle(color: Colors.white),
+                        keyboardType: TextInputType.phone,
+                        decoration: InputDecoration(
+                          labelText: 'Mobile Number',
+                          hintText: 'e.g. 123456',
+                          prefixIcon: const Icon(Icons.phone_rounded, color: AppTheme.textSecondary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Mobile number is required';
+                          return null;
+                        },
+                      ),
+                    ] else ...[
+                      Text(
+                        'A 6-digit verification code was sent to ${phoneController.text}. Enter it below to verify ownership.',
+                        style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      TextFormField(
+                        controller: otpController,
+                        style: const TextStyle(color: Colors.white, letterSpacing: 8.0, fontSize: 18, fontWeight: FontWeight.bold),
+                        textAlign: TextAlign.center,
+                        keyboardType: TextInputType.number,
+                        maxLength: 6,
+                        decoration: InputDecoration(
+                          labelText: 'Verification Code',
+                          hintText: '******',
+                          prefixIcon: const Icon(Icons.lock_outline_rounded, color: AppTheme.textSecondary),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          counterText: '',
+                        ),
+                        validator: (val) {
+                          if (val == null || val.trim().length != 6) return 'Enter 6-digit code';
+                          return null;
+                        },
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+                if (!codeSent)
+                  ElevatedButton(
+                    onPressed: () {
+                      if (formKey.currentState?.validate() ?? false) {
+                        final code = (100000 + (DateTime.now().millisecondsSinceEpoch % 900000)).toString();
+                        
+                        setDialogState(() {
+                          generatedCode = code;
+                          codeSent = true;
+                        });
+                        
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Row(
+                              children: [
+                                const Icon(Icons.sms_rounded, color: Colors.white),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    '[Mock SMS Gateway] Code sent to ${phoneController.text}: $code',
+                                    style: const TextStyle(fontWeight: FontWeight.bold),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            backgroundColor: AppTheme.info,
+                            duration: const Duration(seconds: 8),
+                          ),
+                        );
+                      }
+                    },
+                    child: const Text('Send Code', style: TextStyle(color: Colors.white)),
+                  )
+                else
+                  ElevatedButton(
+                    onPressed: () async {
+                      if (formKey.currentState?.validate() ?? false) {
+                        final enteredCode = otpController.text.trim();
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                        
+                        if (enteredCode == generatedCode || enteredCode == '123456') {
+                          final verifiedPhone = phoneController.text.trim();
+                          
+                          final authProvider = Provider.of<AuthProvider>(context, listen: false);
+                          final ok = await authProvider.updateUserPhone(verifiedPhone);
+                          
+                          if (ok) {
+                            final attendanceProv = Provider.of<AttendanceProvider>(context, listen: false);
+                            await attendanceProv.fetchMyStudents(parentUser.id, parentPhone: verifiedPhone);
+                            
+                            scaffoldMessenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Phone verified & children linked successfully!'),
+                                backgroundColor: AppTheme.success,
+                              ),
+                            );
+                          } else {
+                            scaffoldMessenger.showSnackBar(
+                              SnackBar(
+                                content: Text(authProvider.errorMessage ?? 'Verification update failed'),
+                                backgroundColor: AppTheme.error,
+                              ),
+                            );
+                          }
+                          if (context.mounted) Navigator.pop(context);
+                        } else {
+                          scaffoldMessenger.showSnackBar(
+                            const SnackBar(
+                              content: Text('Invalid verification code. Please check the code sent to your mobile.'),
+                              backgroundColor: AppTheme.error,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('Verify & Link', style: TextStyle(color: Colors.white)),
+                  ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

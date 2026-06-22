@@ -19,6 +19,7 @@ import 'screens/home/home_screen.dart';
 import 'screens/student_management/student_management_screen.dart';
 import 'screens/student_management/qr_card_screen.dart';
 import 'screens/student_management/qr_scanner_screen.dart';
+import 'screens/settings/driver_settings_screen.dart';
 import 'providers/chat_provider.dart';
 import 'providers/billing_provider.dart';
 import 'providers/feedback_provider.dart';
@@ -99,6 +100,7 @@ class SafeKidApp extends StatelessWidget {
               AppConstants.routeStudentManagement: (context) => const StudentManagementScreen(),
               AppConstants.routeQrCard: (context) => const QrCardScreen(),
               AppConstants.routeQrScanner: (context) => const QrScannerScreen(),
+              '/driver-settings': (context) => const DriverSettingsScreen(),
               AppConstants.routeChatList: (context) => const ChatListScreen(),
               AppConstants.routeChat: (context) => const ChatScreen(),
               AppConstants.routeChatbot: (context) => const ChatbotScreen(),

@@ -35,10 +35,10 @@ class _HomeScreenState extends State<HomeScreen> {
         final attendance = Provider.of<AttendanceProvider>(context, listen: false);
         // Load default students for parent or general boarding verification
         if (user.role == UserRole.parent) {
-          attendance.fetchMyStudents(user.id);
+          attendance.fetchMyStudents(user.id, parentPhone: user.phone);
         } else {
           // For driver/assistant: load mock route boarding students
-          attendance.fetchMyStudents('mock-parent-uid-123');
+          attendance.fetchMyStudents('mock-parent-uid-123', parentPhone: '');
         }
         // Fetch conversations for chat unread badges
         Provider.of<ChatProvider>(context, listen: false).fetchConversations(user.id, user.role);
@@ -236,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildWelcomeHeader(UserModel user) {
     String subtitle = 'Parent Profile';
-    if (user.role == UserRole.driver) subtitle = 'Bus Driver Profile';
+    if (user.role == UserRole.driver) subtitle = 'Van Driver Profile';
     if (user.role == UserRole.assistant) subtitle = 'Transit Assistant Profile';
 
     return GlassCard(
@@ -298,24 +298,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // --- DRIVER VIEW ---
   Widget _buildDriverDashboard(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        const DriverDashboard(),
-        const SizedBox(height: 20),
-        const Text(
-          'Active Route GPS',
-          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 300,
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(16),
-            child: _buildTrackingMap(context),
-          ),
-        ),
-      ],
+    return DriverDashboard(
+      mapWidget: _buildTrackingMap(context),
     );
   }
 
