@@ -33,4 +33,8 @@ class BillingRepository {
   Future<void> deleteBill(String billId) async {
     await _firestoreService.deleteBillingRecord(billId);
   }
+
+  Future<bool> hasBillingRecordForMonth(String studentId, int year, int month) async {
+    return await _firestoreService.hasBillingRecordForMonth(studentId, year, month);
+  }
 }

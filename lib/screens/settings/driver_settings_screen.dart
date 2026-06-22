@@ -218,6 +218,7 @@ class _DriverSettingsScreenState extends State<DriverSettingsScreen> with Single
     final parentPhoneController = TextEditingController(text: kid?.parentPhone);
     final pickupController = TextEditingController(text: kid?.pickupPoint);
     final dropController = TextEditingController(text: kid?.dropPoint);
+    final feeController = TextEditingController(text: kid != null ? kid.monthlyFee.toStringAsFixed(2) : '150.00');
     final formKey = GlobalKey<FormState>();
 
     bool hasCustom = kid?.hasCustomTimings ?? false;
@@ -309,6 +310,21 @@ class _DriverSettingsScreenState extends State<DriverSettingsScreen> with Single
                         hintText: 'e.g. Attock School Stop',
                         prefixIcon: Icons.location_searching_rounded,
                       ),
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: feeController,
+                        labelText: 'Monthly Fee (\$)',
+                        hintText: 'e.g. 150.00',
+                        prefixIcon: Icons.attach_money_rounded,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Required';
+                          final fee = double.tryParse(val.trim());
+                          if (fee == null) return 'Invalid fee';
+                          if (fee < 0) return 'Cannot be negative';
+                          return null;
+                        },
+                      ),
                       const Divider(color: Colors.white10),
                       SwitchListTile(
                         title: const Text('Custom Schedule', style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
@@ -392,6 +408,7 @@ class _DriverSettingsScreenState extends State<DriverSettingsScreen> with Single
                           hasCustomTimings: hasCustom,
                           customPickupTime: hasCustom ? customPickupController.text.trim() : null,
                           customDropTime: hasCustom ? customDropController.text.trim() : null,
+                          monthlyFee: double.tryParse(feeController.text.trim()) ?? 150.0,
                         );
                         final ok = await attendance.editStudent(updatedKid);
                         if (ok) {
@@ -433,6 +450,7 @@ class _DriverSettingsScreenState extends State<DriverSettingsScreen> with Single
                           hasCustomTimings: hasCustom,
                           customPickupTime: hasCustom ? customPickupController.text.trim() : null,
                           customDropTime: hasCustom ? customDropController.text.trim() : null,
+                          monthlyFee: double.tryParse(feeController.text.trim()) ?? 150.0,
                         );
                         final ok = await attendance.addStudent(newKid);
                         if (ok) {

@@ -63,6 +63,7 @@ abstract class FirestoreService {
   Future<void> createBillingRecord(BillingModel bill);
   Future<void> updateBillingRecord(BillingModel bill);
   Future<void> deleteBillingRecord(String billId);
+  Future<bool> hasBillingRecordForMonth(String studentId, int year, int month);
 }
 
 /// Production implementation using Firebase Cloud Firestore
@@ -464,7 +465,10 @@ class FirebaseFirestoreService implements FirestoreService {
           .collection('billing')
           .where('parentId', isEqualTo: parentId)
           .get();
-      return snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList();
+      return snap.docs
+          .map((doc) => BillingModel.fromJson(doc.data(), doc.id))
+          .where((bill) => bill.status != 'deleted')
+          .toList();
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -476,7 +480,10 @@ class FirebaseFirestoreService implements FirestoreService {
         .collection('billing')
         .where('parentId', isEqualTo: parentId)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList());
+        .map((snap) => snap.docs
+            .map((doc) => BillingModel.fromJson(doc.data(), doc.id))
+            .where((bill) => bill.status != 'deleted')
+            .toList());
   }
 
   @override
@@ -500,7 +507,10 @@ class FirebaseFirestoreService implements FirestoreService {
           .collection('billing')
           .where('parentId', whereIn: parentIds)
           .get();
-      return snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList();
+      return snap.docs
+          .map((doc) => BillingModel.fromJson(doc.data(), doc.id))
+          .where((bill) => bill.status != 'deleted')
+          .toList();
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -513,7 +523,10 @@ class FirebaseFirestoreService implements FirestoreService {
         .collection('billing')
         .where('parentId', whereIn: parentIds)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => BillingModel.fromJson(doc.data(), doc.id)).toList());
+        .map((snap) => snap.docs
+            .map((doc) => BillingModel.fromJson(doc.data(), doc.id))
+            .where((bill) => bill.status != 'deleted')
+            .toList());
   }
 
   @override
@@ -537,7 +550,27 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> deleteBillingRecord(String billId) async {
     try {
-      await _firestore.collection('billing').doc(billId).delete();
+      await _firestore.collection('billing').doc(billId).update({'status': 'deleted'});
+    } catch (e) {
+      throw ServerFailure(e.toString());
+    }
+  }
+
+  @override
+  Future<bool> hasBillingRecordForMonth(String studentId, int year, int month) async {
+    try {
+      final snap = await _firestore
+          .collection('billing')
+          .where('studentId', isEqualTo: studentId)
+          .get();
+      return snap.docs.any((doc) {
+        final data = doc.data();
+        final billingDateStr = data['billingDate']?.toString();
+        if (billingDateStr == null) return false;
+        final billingDate = DateTime.tryParse(billingDateStr);
+        if (billingDate == null) return false;
+        return billingDate.year == year && billingDate.month == month;
+      });
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -1024,7 +1057,9 @@ class MockFirestoreService implements FirestoreService {
   @override
   Future<List<BillingModel>> getBillingRecords(String parentId) async {
     await Future.delayed(const Duration(milliseconds: 300));
-    return _billing.values.where((bill) => bill.parentId == parentId).toList();
+    return _billing.values
+        .where((bill) => bill.parentId == parentId && bill.status != 'deleted')
+        .toList();
   }
 
   @override
@@ -1033,7 +1068,9 @@ class MockFirestoreService implements FirestoreService {
       parentId, 
       () => StreamController<List<BillingModel>>.broadcast()
     );
-    final initialList = _billing.values.where((bill) => bill.parentId == parentId).toList();
+    final initialList = _billing.values
+        .where((bill) => bill.parentId == parentId && bill.status != 'deleted')
+        .toList();
     controller.add(initialList);
     return controller.stream;
   }
@@ -1050,7 +1087,9 @@ class MockFirestoreService implements FirestoreService {
       _billingStreamControllers.forEach((key, controller) {
         final keys = key.split('_');
         if (keys.contains(parentId) || key == parentId) {
-          final list = _billing.values.where((b) => keys.contains(b.parentId) || b.parentId == key).toList();
+          final list = _billing.values
+              .where((b) => (keys.contains(b.parentId) || b.parentId == key) && b.status != 'deleted')
+              .toList();
           controller.add(list);
         }
       });
@@ -1060,7 +1099,9 @@ class MockFirestoreService implements FirestoreService {
   @override
   Future<List<BillingModel>> getBillingRecordsForParents(List<String> parentIds) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    return _billing.values.where((bill) => parentIds.contains(bill.parentId)).toList();
+    return _billing.values
+        .where((bill) => parentIds.contains(bill.parentId) && bill.status != 'deleted')
+        .toList();
   }
 
   @override
@@ -1070,7 +1111,9 @@ class MockFirestoreService implements FirestoreService {
       queryKey, 
       () => StreamController<List<BillingModel>>.broadcast()
     );
-    final initialList = _billing.values.where((bill) => parentIds.contains(bill.parentId)).toList();
+    final initialList = _billing.values
+        .where((bill) => parentIds.contains(bill.parentId) && bill.status != 'deleted')
+        .toList();
     controller.add(initialList);
     return controller.stream;
   }
@@ -1092,17 +1135,29 @@ class MockFirestoreService implements FirestoreService {
   @override
   Future<void> deleteBillingRecord(String billId) async {
     await Future.delayed(const Duration(milliseconds: 200));
-    final bill = _billing.remove(billId);
+    final bill = _billing[billId];
     if (bill != null) {
+      _billing[billId] = bill.copyWith(status: 'deleted');
       _notifyBillingUpdate(bill.parentId);
     }
+  }
+
+  @override
+  Future<bool> hasBillingRecordForMonth(String studentId, int year, int month) async {
+    await Future.delayed(const Duration(milliseconds: 100));
+    return _billing.values.any((bill) =>
+        bill.studentId == studentId &&
+        bill.billingDate.year == year &&
+        bill.billingDate.month == month);
   }
 
   void _notifyBillingUpdate(String parentId) {
     _billingStreamControllers.forEach((key, controller) {
       final keys = key.split('_');
       if (keys.contains(parentId) || key == parentId) {
-        final list = _billing.values.where((b) => keys.contains(b.parentId) || b.parentId == key).toList();
+        final list = _billing.values
+            .where((b) => (keys.contains(b.parentId) || b.parentId == key) && b.status != 'deleted')
+            .toList();
         controller.add(list);
       }
     });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../repositories/billing_repository.dart';
 import '../models/billing_model.dart';
+import '../models/student_model.dart';
 
 class BillingProvider extends ChangeNotifier {
   final BillingRepository _billingRepository;
@@ -85,6 +86,48 @@ class BillingProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       rethrow;
+    }
+  }
+
+  Future<void> autoGenerateMonthlyBills(List<StudentModel> students) async {
+    final now = DateTime.now();
+    final currentYear = now.year;
+    final currentMonth = now.month;
+    bool createdAny = false;
+
+    for (final student in students) {
+      if (student.parentUid.isEmpty) continue;
+
+      try {
+        final exists = await _billingRepository.hasBillingRecordForMonth(
+          student.id,
+          currentYear,
+          currentMonth,
+        );
+
+        if (!exists) {
+          final billingDate = DateTime(currentYear, currentMonth, 1);
+          final dueDate = DateTime(currentYear, currentMonth, 10);
+          final newBill = BillingModel(
+            id: 'bill_${student.id}_${currentYear}_${currentMonth}',
+            parentId: student.parentUid,
+            studentId: student.id,
+            amount: student.monthlyFee,
+            status: 'pending',
+            billingDate: billingDate,
+            dueDate: dueDate,
+          );
+
+          await _billingRepository.createBill(newBill);
+          createdAny = true;
+        }
+      } catch (e) {
+        debugPrint('Failed to auto-generate bill for student ${student.id}: $e');
+      }
+    }
+
+    if (createdAny) {
+      notifyListeners();
     }
   }
 }

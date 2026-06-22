@@ -15,6 +15,7 @@ import '../../../models/user_model.dart';
 import '../../../providers/billing_provider.dart';
 import '../../../models/billing_model.dart';
 import '../../../providers/feedback_provider.dart';
+import '../../../services/firebase/notification_service.dart';
 
 class ParentDashboard extends StatefulWidget {
   const ParentDashboard({super.key});
@@ -35,6 +36,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
   int _safetyRating = 5;
   int _punctualityRating = 5;
   final TextEditingController _feedbackCommentsController = TextEditingController();
+  final Set<String> _notifiedBillIds = {};
 
   @override
   void dispose() {
@@ -1290,6 +1292,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
 
   Widget _buildBillingSection(BuildContext context, String parentId) {
     final billingProvider = Provider.of<BillingProvider>(context);
+    final attendance = Provider.of<AttendanceProvider>(context);
 
     return StreamBuilder<List<BillingModel>>(
       stream: billingProvider.streamParentBills(parentId),
@@ -1299,131 +1302,249 @@ class _ParentDashboardState extends State<ParentDashboard> {
         }
 
         final bills = snapshot.data ?? [];
-        if (bills.isEmpty) {
-          return const SizedBox.shrink();
+
+        // Trigger due date alert notifications
+        final today = DateTime.now();
+        for (final bill in bills) {
+          if (bill.status.toLowerCase() != 'paid' && !_notifiedBillIds.contains(bill.id)) {
+            final student = attendance.myStudents.firstWhere(
+              (s) => s.id == bill.studentId,
+              orElse: () => StudentModel(id: '', name: 'Student', className: '', section: '', schoolName: '', parentUid: parentId, qrCodeData: ''),
+            );
+            final diffDays = bill.dueDate.difference(today).inDays;
+
+            if (bill.dueDate.isBefore(today)) {
+              _notifiedBillIds.add(bill.id);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                NotificationService().triggerNotification(
+                  title: '⚠️ Overdue Fee Alert',
+                  body: 'Transport fee of \$${bill.amount.toStringAsFixed(2)} for ${student.name} is overdue since ${bill.dueDate.day}/${bill.dueDate.month}/${bill.dueDate.year}.',
+                  studentId: bill.studentId,
+                );
+              });
+            } else if (diffDays >= 0 && diffDays <= 3) {
+              _notifiedBillIds.add(bill.id);
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                NotificationService().triggerNotification(
+                  title: '🔔 Fee Due Soon',
+                  body: 'Transport fee of \$${bill.amount.toStringAsFixed(2)} for ${student.name} is due on ${bill.dueDate.day}/${bill.dueDate.month}/${bill.dueDate.year}.',
+                  studentId: bill.studentId,
+                );
+              });
+            }
+          }
         }
 
-        // Find the latest pending invoice, or default to the most recent paid invoice
-        final activeInvoice = bills.firstWhere(
-          (b) => b.status.toLowerCase() != 'paid',
-          orElse: () => bills.first,
-        );
-
-        final isPaid = activeInvoice.status.toLowerCase() == 'paid';
-        final statusColor = isPaid ? AppTheme.success : AppTheme.warning;
-
-        final attendance = Provider.of<AttendanceProvider>(context, listen: false);
-        final student = attendance.myStudents.firstWhere(
-          (s) => s.id == activeInvoice.studentId,
-          orElse: () => StudentModel(
-            id: '',
-            name: '',
-            className: '',
-            section: '',
-            schoolName: '',
-            parentUid: parentId,
-            parentName: '',
-            qrCodeData: '',
-          ),
-        );
-        final feeTitle = student.name.isNotEmpty 
-            ? 'Transport Fees - ${student.name}' 
-            : 'Transport Fees';
+        // Calculate Aggregates
+        final double totalPaid = bills
+            .where((b) => b.status.toLowerCase() == 'paid')
+            .fold(0.0, (sum, b) => sum + b.amount);
+        final double totalPending = bills
+            .where((b) => b.status.toLowerCase() != 'paid')
+            .fold(0.0, (sum, b) => sum + b.amount);
 
         return GlassCard(
           padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              // Header
+              const Row(
                 children: [
-                  Row(
-                    children: [
-                      Icon(Icons.payment_rounded, color: statusColor, size: 22),
-                      const SizedBox(width: 8),
-                      Text(
-                        feeTitle,
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ],
+                  Icon(Icons.account_balance_wallet_rounded, color: AppTheme.accentLight, size: 22),
+                  SizedBox(width: 8),
+                  Text(
+                    'Billing & Payments Overview',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: statusColor.withOpacity(0.24), width: 1),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Totals Row
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.success.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.success.withOpacity(0.15)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Total Paid', style: TextStyle(color: AppTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('\$${totalPaid.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.success, fontSize: 18, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
-                    child: Text(
-                      activeInvoice.status.toUpperCase(),
-                      style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppTheme.warning.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppTheme.warning.withOpacity(0.15)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Pending Amount', style: TextStyle(color: AppTheme.textMuted, fontSize: 10, fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 4),
+                          Text('\$${totalPending.toStringAsFixed(2)}', style: const TextStyle(color: AppTheme.warning, fontSize: 18, fontWeight: FontWeight.bold)),
+                        ],
+                      ),
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Monthly Charge',
-                        style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        '\$${activeInvoice.amount.toStringAsFixed(2)}',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        isPaid ? 'Paid Date' : 'Due Date',
-                        style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isPaid
-                            ? '${activeInvoice.billingDate.day}/${activeInvoice.billingDate.month}/${activeInvoice.billingDate.year}'
-                            : '${activeInvoice.dueDate.day}/${activeInvoice.dueDate.month}/${activeInvoice.dueDate.year}',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              if (!isPaid) ...[
+
+              // Monthly Fee Structures
+              if (attendance.myStudents.isNotEmpty) ...[
+                const Text(
+                  'Monthly Fee Structures',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
+                ),
+                const SizedBox(height: 8),
+                ...attendance.myStudents.map((student) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.school_rounded, color: AppTheme.accentLight, size: 14),
+                            const SizedBox(width: 6),
+                            Text(student.name, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          ],
+                        ),
+                        Text(
+                          '\$${student.monthlyFee.toStringAsFixed(2)} / month',
+                          style: const TextStyle(color: AppTheme.accentLight, fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
                 const SizedBox(height: 16),
                 const Divider(color: Colors.white10, height: 1),
                 const SizedBox(height: 16),
-                billingProvider.isLoading
-                    ? const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor))
-                    : ElevatedButton.icon(
-                        onPressed: () {
-                          billingProvider.payBill(activeInvoice.id);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Simulated payment of \$150.00 processed successfully!'),
-                              backgroundColor: AppTheme.success,
-                            ),
-                          );
-                        },
-                        icon: const Icon(Icons.credit_card_rounded, size: 16),
-                        label: const Text('Pay Invoice Now'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryColor,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
               ],
+
+              // Invoice List
+              const Text(
+                'Invoices & Statements',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textSecondary),
+              ),
+              const SizedBox(height: 8),
+              if (bills.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 12.0),
+                  child: Center(
+                    child: Text('No billing history available.', style: TextStyle(color: AppTheme.textMuted, fontSize: 12)),
+                  ),
+                )
+              else
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: bills.length,
+                  separatorBuilder: (_, __) => const Divider(color: Colors.white10, height: 12),
+                  itemBuilder: (context, index) {
+                    final bill = bills[index];
+                    final isPaid = bill.status.toLowerCase() == 'paid';
+                    final student = attendance.myStudents.firstWhere(
+                      (s) => s.id == bill.studentId,
+                      orElse: () => StudentModel(id: '', name: 'Student', className: '', section: '', schoolName: '', parentUid: parentId, qrCodeData: ''),
+                    );
+
+                    return Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                student.name,
+                                style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                isPaid 
+                                    ? 'Paid: ${bill.billingDate.day}/${bill.billingDate.month}/${bill.billingDate.year}'
+                                    : 'Due: ${bill.dueDate.day}/${bill.dueDate.month}/${bill.dueDate.year}',
+                                style: const TextStyle(color: AppTheme.textMuted, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '\$${bill.amount.toStringAsFixed(2)}',
+                                  style: TextStyle(
+                                    color: isPaid ? AppTheme.success : AppTheme.warning,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  bill.status.toUpperCase(),
+                                  style: TextStyle(
+                                    color: isPaid ? AppTheme.success : AppTheme.warning,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 8,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            if (!isPaid) ...[
+                              const SizedBox(width: 8),
+                              billingProvider.isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryColor),
+                                    )
+                                  : ElevatedButton(
+                                      onPressed: () {
+                                        billingProvider.payBill(bill.id);
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Simulated payment of \$${bill.amount.toStringAsFixed(2)} processed successfully!'),
+                                            backgroundColor: AppTheme.success,
+                                          ),
+                                        );
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppTheme.primaryColor,
+                                        foregroundColor: Colors.white,
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      child: const Text('Pay', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    );
+                  },
+                ),
             ],
           ),
         );

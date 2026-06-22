@@ -664,6 +664,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
     final parentPhoneController = TextEditingController(text: student?.parentPhone);
     final pickupController = TextEditingController(text: student?.pickupPoint);
     final dropController = TextEditingController(text: student?.dropPoint);
+    final feeController = TextEditingController(text: student != null ? student.monthlyFee.toStringAsFixed(2) : '150.00');
     final formKey = GlobalKey<FormState>();
 
     double pickupLat = student?.pickupLatitude ?? AppConstants.defaultHomeLatitude;
@@ -858,6 +859,21 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                           },
                         ),
                       ),
+                      const SizedBox(height: 12),
+                      CustomTextField(
+                        controller: feeController,
+                        labelText: 'Monthly Fee (\$)',
+                        hintText: 'e.g. 150.00',
+                        prefixIcon: Icons.attach_money_rounded,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Required';
+                          final fee = double.tryParse(val.trim());
+                          if (fee == null) return 'Invalid fee';
+                          if (fee < 0) return 'Cannot be negative';
+                          return null;
+                        },
+                      ),
                       const Divider(color: Colors.white10),
                       SwitchListTile(
                         title: const Text('Custom Schedule', style: TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.bold)),
@@ -954,6 +970,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                         hasCustomTimings: hasCustom,
                         customPickupTime: hasCustom ? customPickupController.text.trim() : null,
                         customDropTime: hasCustom ? customDropController.text.trim() : null,
+                        monthlyFee: double.tryParse(feeController.text.trim()) ?? 150.0,
                       );
 
                       bool success;

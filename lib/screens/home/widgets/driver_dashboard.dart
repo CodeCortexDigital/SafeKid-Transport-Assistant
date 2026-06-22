@@ -11,6 +11,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/glass_card.dart';
 import '../../../widgets/driver_performance_card.dart';
+import '../../../widgets/custom_text_field.dart';
 import '../../../providers/app_state_provider.dart';
 import '../../../services/firebase/notification_service.dart';
 import '../../../models/scan_log_model.dart';
@@ -853,6 +854,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final attendance = Provider.of<AttendanceProvider>(context, listen: false);
     final billingProvider = Provider.of<BillingProvider>(context, listen: false);
 
+    // Auto-generate missing bills on dialog open
+    billingProvider.autoGenerateMonthlyBills(attendance.myStudents);
+
     // Extract unique parent UIDs from students assigned to this driver
     final parentIds = attendance.myStudents
         .map((s) => s.parentUid)
@@ -986,7 +990,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                     Text(
                                       '\$${bill.amount.toStringAsFixed(2)}',
                                       style: TextStyle(
-                                        fontSize: 14,
+                                        fontSize: 13,
                                         fontWeight: FontWeight.bold,
                                         color: isPaid ? AppTheme.success : AppTheme.warning,
                                       ),
@@ -995,17 +999,35 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                     Text(
                                       bill.status.toUpperCase(),
                                       style: TextStyle(
-                                        fontSize: 9,
+                                        fontSize: 8,
                                         fontWeight: FontWeight.bold,
                                         color: isPaid ? AppTheme.success : AppTheme.warning,
                                       ),
                                     ),
                                   ],
                                 ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_rounded, color: AppTheme.accentLight, size: 18),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _showEditBillDialog(context, bill, billingProvider),
+                                  tooltip: 'Edit Invoice',
+                                ),
+                                const SizedBox(width: 4),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_rounded, color: AppTheme.error, size: 18),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(),
+                                  onPressed: () => _showDeleteBillConfirm(context, bill, billingProvider),
+                                  tooltip: 'Delete Invoice',
+                                ),
                                 if (!isPaid) ...[
-                                  const SizedBox(width: 8),
+                                  const SizedBox(width: 4),
                                   IconButton(
-                                    icon: const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 22),
+                                    icon: const Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 18),
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
                                     onPressed: () {
                                       billingProvider.markAsPaid(bill.id);
                                     },
@@ -1028,6 +1050,169 @@ class _DriverDashboardState extends State<DriverDashboard> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Close', style: TextStyle(color: AppTheme.textSecondary)),
             )
+          ],
+        );
+      },
+    );
+  }
+
+  void _showEditBillDialog(BuildContext context, BillingModel bill, BillingProvider billingProvider) {
+    final amountController = TextEditingController(text: bill.amount.toStringAsFixed(2));
+    DateTime selectedDueDate = bill.dueDate;
+    String selectedStatus = bill.status;
+    final formKey = GlobalKey<FormState>();
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: AppTheme.surfaceColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: BorderSide(color: Colors.white.withOpacity(0.08)),
+              ),
+              title: const Text(
+                'Edit Invoice Details',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              content: SingleChildScrollView(
+                child: Form(
+                  key: formKey,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CustomTextField(
+                        controller: amountController,
+                        labelText: 'Billing Amount (\$)',
+                        hintText: 'e.g. 150.00',
+                        prefixIcon: Icons.attach_money_rounded,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        validator: (val) {
+                          if (val == null || val.trim().isEmpty) return 'Required';
+                          final amount = double.tryParse(val.trim());
+                          if (amount == null) return 'Invalid amount';
+                          if (amount < 0) return 'Cannot be negative';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        leading: const Icon(Icons.calendar_today_rounded, color: AppTheme.accentLight),
+                        title: const Text('Due Date', style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                        subtitle: Text(
+                          '${selectedDueDate.day}/${selectedDueDate.month}/${selectedDueDate.year}',
+                          style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                        ),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.edit_calendar_rounded, color: AppTheme.accentLight),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDueDate,
+                              firstDate: DateTime(2020),
+                              lastDate: DateTime(2100),
+                            );
+                            if (picked != null) {
+                              setDialogState(() {
+                                selectedDueDate = picked;
+                              });
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      DropdownButtonFormField<String>(
+                        dropdownColor: AppTheme.surfaceColor,
+                        value: selectedStatus,
+                        decoration: const InputDecoration(
+                          labelText: 'Payment Status',
+                          labelStyle: TextStyle(color: AppTheme.textSecondary),
+                          prefixIcon: Icon(Icons.info_outline_rounded, color: AppTheme.accentLight),
+                          border: OutlineInputBorder(),
+                        ),
+                        style: const TextStyle(color: Colors.white),
+                        items: ['paid', 'pending', 'unpaid'].map((status) {
+                          return DropdownMenuItem<String>(
+                            value: status,
+                            child: Text(status.toUpperCase(), style: const TextStyle(color: Colors.white)),
+                          );
+                        }).toList(),
+                        onChanged: (val) {
+                          if (val != null) {
+                            setDialogState(() {
+                              selectedStatus = val;
+                            });
+                          }
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (formKey.currentState?.validate() ?? false) {
+                      final updatedBill = bill.copyWith(
+                        amount: double.tryParse(amountController.text.trim()) ?? bill.amount,
+                        dueDate: selectedDueDate,
+                        status: selectedStatus,
+                      );
+                      await billingProvider.updateBill(updatedBill);
+                      if (context.mounted) {
+                        Navigator.pop(context);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Invoice updated successfully'), backgroundColor: AppTheme.success),
+                        );
+                      }
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showDeleteBillConfirm(BuildContext context, BillingModel bill, BillingProvider billingProvider) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppTheme.surfaceColor,
+          title: const Text('Delete Invoice?', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+          content: Text(
+            'Are you sure you want to delete this invoice of \$${bill.amount.toStringAsFixed(2)}? This action cannot be undone.',
+            style: const TextStyle(color: AppTheme.textSecondary),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
+              onPressed: () async {
+                await billingProvider.deleteBill(bill.id);
+                if (context.mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Invoice deleted successfully'), backgroundColor: AppTheme.success),
+                  );
+                }
+              },
+              child: const Text('Delete', style: TextStyle(color: Colors.white)),
+            ),
           ],
         );
       },
