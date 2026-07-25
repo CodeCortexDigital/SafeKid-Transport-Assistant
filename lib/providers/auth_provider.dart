@@ -15,6 +15,7 @@ class AuthProvider extends ChangeNotifier {
   String? _phoneNumber;
   bool _needsRegistration = false;
   bool _isManualLoginInProgress = false;
+  StreamSubscription<UserModel?>? _authStateSubscription;
 
   UserModel? get user => _user;
   bool get isAuthenticated => _user != null;
@@ -27,7 +28,7 @@ class AuthProvider extends ChangeNotifier {
 
   AuthProvider(this._authRepository) {
     // Listen to changes in authentication state
-    _authRepository.authStateChanges.listen((UserModel? fbUser) async {
+    _authStateSubscription = _authRepository.authStateChanges.listen((UserModel? fbUser) async {
       if (_isManualLoginInProgress) return;
       if (fbUser == null) {
         _user = null;
@@ -390,8 +391,32 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<bool> verifyCachedUser(UserModel cachedUser) async {
+    try {
+      final currentAuthUser = _authRepository.currentUser;
+      final isMock = cachedUser.id.startsWith('mock-');
+      
+      if (!isMock) {
+        if (currentAuthUser == null || currentAuthUser.id != cachedUser.id) {
+          return false;
+        }
+      }
+      
+      final profile = await _authRepository.getUserProfile(cachedUser.id);
+      return profile != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void clearError() {
     _errorMessage = null;
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _authStateSubscription?.cancel();
+    super.dispose();
   }
 }

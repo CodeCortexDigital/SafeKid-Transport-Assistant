@@ -1,0 +1,41 @@
+Hello everyone,
+Welcome to the demonstration of SafeKid Transport Assistant, an intelligent school transport management solution designed to improve student safety, enhance parent confidence, and streamline transportation operations.
+Every day, thousands of parents worry about one simple question:
+"Has my child safely reached school?"
+SafeKid Transport Assistant solves this problem by providing real-time tracking, secure student verification, instant communication, and intelligent notifications throughout the entire transportation journey.
+Let's begin.
+When the application launches, users can securely sign in using Google Authentication, Phone OTP verification, or biometric authentication such as fingerprint or face recognition.
+Based on the user's role, the system automatically redirects them to the appropriate dashboard, whether they are a Parent, Driver, or Transport Assistant.
+Let's first explore the Parent Console.
+Here, parents can instantly view their child's transportation status. The system clearly indicates whether the child is currently at home, in transit, or has safely arrived at school.
+Before pickup, parents can activate the Ready for Pickup option, allowing the driver to know that the child is waiting and prepared for collection.
+For added security, the application generates a unique QR Safety Pass for each student. This pass contains secure student information and is used during boarding and drop-off verification.
+Now, let's switch to the Driver Dashboard.
+Drivers can start and manage trips using simple controls.
+The dashboard displays categorized student lists, including students waiting for pickup, students currently onboard, and students already dropped at school.
+As the vehicle moves, the system continuously tracks its location using GPS and automatically updates information to the cloud every few seconds.
+Parents can view the van's live location on an interactive map and receive accurate estimated arrival times based on the vehicle's current position.
+When a student boards the vehicle, the driver scans the student's QR Safety Pass.
+The system immediately verifies the student's identity and records the boarding event, including the time, location, and status update.
+The same process is repeated during drop-off, ensuring complete visibility and accountability throughout the journey.
+SafeKid also includes a built-in communication platform.
+Parents and drivers can exchange messages in real time whenever necessary.
+In addition, an AI-powered assistant is available to answer common questions instantly.
+For example, parents can ask:
+"Where is my child's van?"
+or
+"What is my outstanding balance?"
+and receive immediate responses.
+The application also simplifies transport fee management.
+Monthly invoices are generated automatically, and parents can view payment history, pending balances, and upcoming dues directly from the application.
+Automatic reminders help ensure that payments are never missed.
+To maintain service quality, parents can submit ratings and feedback regarding driver behavior, punctuality, and overall safety.
+These ratings contribute to a real-time performance dashboard that helps transport operators monitor service standards and continuously improve operations.
+Throughout the entire process, the application delivers instant notifications whenever important events occur, such as student pickup, school arrival, trip updates, payment reminders, or emergency alerts.
+This ensures that parents remain informed at every stage of their child's journey.
+In conclusion, SafeKid Transport Assistant combines secure authentication, real-time GPS tracking, QR-based student verification, intelligent notifications, AI assistance, billing automation, and performance analytics into a single comprehensive platform.
+Our mission is simple:
+To make every school journey safer, smarter, and more transparent for parents, drivers, and educational institutions.
+Thank you for watching.
+SafeKid Transport Assistant.
+Because every child's journey matters.

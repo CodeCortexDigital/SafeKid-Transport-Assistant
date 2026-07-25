@@ -37,6 +37,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final locationProv = Provider.of<LocationProvider>(context, listen: false);
       locationProv.startTrackingTrip('mock-ride-1');
       _locationProvider = locationProv;
@@ -888,6 +889,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 StreamBuilder<List<BillingModel>>(
                   stream: billingProvider.streamDriverRouteBills(parentIds),
                   builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Text(
+                          'Error loading summary: ${snapshot.error}',
+                          style: const TextStyle(color: AppTheme.error, fontSize: 12),
+                        ),
+                      );
+                    }
                     final bills = snapshot.data ?? [];
                     final double collected = bills
                         .where((b) => b.status.toLowerCase() == 'paid')
@@ -924,6 +934,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     builder: (context, snapshot) {
                       if (snapshot.connectionState == ConnectionState.waiting) {
                         return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+                      }
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Error loading billing history: ${snapshot.error}',
+                            style: const TextStyle(color: AppTheme.error),
+                          ),
+                        );
                       }
                       final records = snapshot.data ?? [];
                       if (records.isEmpty) {
@@ -1260,6 +1278,14 @@ class _DriverDashboardState extends State<DriverDashboard> {
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+                }
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Error loading feedback: ${snapshot.error}',
+                      style: const TextStyle(color: AppTheme.error),
+                    ),
+                  );
                 }
 
                 final feedbacks = snapshot.data ?? [];

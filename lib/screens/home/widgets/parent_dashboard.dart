@@ -48,6 +48,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final user = Provider.of<AuthProvider>(context, listen: false).user;
       if (user != null) {
         Provider.of<AttendanceProvider>(context, listen: false).fetchMyStudents(user.id, parentPhone: user.phone);
@@ -1299,6 +1300,14 @@ class _ParentDashboardState extends State<ParentDashboard> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
+        }
+        if (snapshot.hasError) {
+          return Center(
+            child: Text(
+              'Error loading bills: ${snapshot.error}',
+              style: const TextStyle(color: AppTheme.error),
+            ),
+          );
         }
 
         final bills = snapshot.data ?? [];

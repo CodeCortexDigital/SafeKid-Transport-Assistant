@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/student_model.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/file_saver.dart';
 
 class QrCardScreen extends StatelessWidget {
   const QrCardScreen({super.key});
@@ -263,24 +264,15 @@ class QrCardScreen extends StatelessWidget {
 
       if (pngBytes == null) throw Exception('Image capture failed.');
 
-      if (kIsWeb) {
-        // Web downloads fallback
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Safety Pass image downloaded to browser!'),
-            backgroundColor: AppTheme.success,
-          ),
-        );
-      } else {
-        // Native platforms: write to documents
-        final directory = await getApplicationDocumentsDirectory();
-        final filePath = '${directory.path}/SafeKid_${studentName.replaceAll(' ', '_')}_Pass.png';
-        final file = File(filePath);
-        await file.writeAsBytes(pngBytes);
+      final filename = 'SafeKid_${studentName.replaceAll(' ', '_')}_Pass.png';
+      await saveFileBytes(pngBytes, filename);
 
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Safety Pass saved to: $filePath'),
+            content: Text(kIsWeb
+                ? 'Safety Pass image downloaded to browser!'
+                : 'Safety Pass saved as $filename'),
             backgroundColor: AppTheme.success,
             duration: const Duration(seconds: 4),
           ),

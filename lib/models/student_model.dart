@@ -188,7 +188,7 @@ class StudentModel {
   }
 
   bool get isStudentReady {
-    if (status == StudentStatus.absent) return false;
+    if (status != StudentStatus.home) return false;
     if (DateTime.now().weekday == DateTime.sunday) return false;
     if (hasCustomTimings) {
       return _isCurrentTimeAtOrAfter(customPickupTime);
@@ -218,7 +218,7 @@ class StudentModel {
       final compareTime = DateTime(now.year, now.month, now.day, hour, minute);
       return now.isAfter(compareTime) || now.isAtSameMomentAs(compareTime);
     } catch (_) {
-      return true; // fallback
+      return false; // fallback
     }
   }
 }

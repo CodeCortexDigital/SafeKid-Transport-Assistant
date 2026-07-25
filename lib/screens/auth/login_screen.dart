@@ -61,8 +61,32 @@ class _LoginScreenState extends State<LoginScreen> {
 
     if (mounted) {
       final auth = Provider.of<AuthProvider>(context, listen: false);
-      auth.loginWithCachedUser(cachedUser);
       
+      // Show verifying indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Verifying security session...'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+
+      final isValid = await auth.verifyCachedUser(cachedUser);
+      if (!isValid) {
+        if (mounted) {
+          await BiometricService.clearSession();
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Your session has expired or has been revoked. Please sign in again.'),
+              backgroundColor: AppTheme.error,
+            ),
+          );
+        }
+        return;
+      }
+
+      auth.loginWithCachedUser(cachedUser);
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Welcome back, ${cachedUser.name}!'),

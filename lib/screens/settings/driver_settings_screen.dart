@@ -631,6 +631,14 @@ class _DriverSettingsScreenState extends State<DriverSettingsScreen> with Single
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator(color: AppTheme.primaryColor));
           }
+          if (snapshot.hasError) {
+            return Center(
+              child: Text(
+                'Error loading billing records: ${snapshot.error}',
+                style: const TextStyle(color: AppTheme.error),
+              ),
+            );
+          }
           final bills = snapshot.data ?? [];
           if (bills.isEmpty) {
             return _buildEmptyState(Icons.payment_rounded, 'No Invoices Found', 'Add a billing record for a student.');

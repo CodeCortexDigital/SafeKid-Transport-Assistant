@@ -20,6 +20,17 @@ class DriverPerformanceCard extends StatelessWidget {
     return StreamBuilder<List<FeedbackModel>>(
       stream: feedbackProv.watchAllFeedback(),
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return GlassCard(
+            padding: const EdgeInsets.all(20),
+            child: Center(
+              child: Text(
+                'Error loading performance profile: ${snapshot.error}',
+                style: const TextStyle(color: AppTheme.error),
+              ),
+            ),
+          );
+        }
         final feedback = snapshot.data ?? [];
         final metrics = DriverPerformanceService.calculate(
           feedback: feedback,
