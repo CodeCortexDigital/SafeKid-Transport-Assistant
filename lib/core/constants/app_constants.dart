@@ -21,6 +21,12 @@ class AppConstants {
   // Firestore Collection Names
   static const String usersCollection = 'users';
   static const String studentsCollection = 'students';
+  static const String vehiclesCollection = 'vehicles';
+  static const String tripsCollection = 'trips';
+  static const String scanLogsCollection = 'scan_logs';
+  static const String messagesCollection = 'messages';
+  static const String feedbackCollection = 'feedback';
+  static const String billingCollection = 'billing';
   static const String ridesCollection = 'rides';
   static const String attendanceCollection = 'attendance_logs';
 

@@ -987,7 +987,7 @@ class _StudentManagementScreenState extends State<StudentManagementScreen> {
                             body: 'Driver has set custom pickup/drop timings for ${updatedStudent.name}: Pickup at ${updatedStudent.customPickupTime ?? "N/A"}, Drop at ${updatedStudent.customDropTime ?? "N/A"}.',
                             studentId: updatedStudent.id,
                           );
-                        } else if (isEdit && student!.hasCustomTimings) {
+                        } else if (isEdit && student.hasCustomTimings) {
                           NotificationService().triggerNotification(
                             title: 'Route Timings Reset',
                             body: 'Driver has reset timings for ${updatedStudent.name} to standard schedule.',

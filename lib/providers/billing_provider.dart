@@ -109,7 +109,7 @@ class BillingProvider extends ChangeNotifier {
           final billingDate = DateTime(currentYear, currentMonth, 1);
           final dueDate = DateTime(currentYear, currentMonth, 10);
           final newBill = BillingModel(
-            id: 'bill_${student.id}_${currentYear}_${currentMonth}',
+            id: 'bill_${student.id}_${currentYear}_$currentMonth',
             parentId: student.parentUid,
             studentId: student.id,
             amount: student.monthlyFee,

@@ -13,6 +13,7 @@ import '../repositories/scan_log_repository.dart';
 import '../repositories/message_repository.dart';
 import '../repositories/feedback_repository.dart';
 import '../repositories/billing_repository.dart';
+import '../core/constants/secrets.dart';
 
 class AppStateProvider extends ChangeNotifier {
   bool _isFirebaseInitialized = false;
@@ -50,17 +51,7 @@ class AppStateProvider extends ChangeNotifier {
         await Firebase.initializeApp();
       } catch (_) {
         // Fallback to manual options matching the provided web parameters
-        await Firebase.initializeApp(
-          options: const FirebaseOptions(
-                apiKey: 'AIzaSyD7kBY4q9yTC5yhwlkrqViy_8p_LBF_MgA',
-            appId: '1:473302958295:web:6bad73cc657a509cedb092',
-            messagingSenderId: '473302958295',
-            projectId: 'safekid-transport-assistant',
-            authDomain: 'safekid-transport-assistant.firebaseapp.com',
-            storageBucket: 'safekid-transport-assistant.firebasestorage.app',
-            measurementId: 'G-KQD6KX2P4G',
-          ),
-        );
+        await Firebase.initializeApp(options: Secrets.firebaseOptions);
       }
       _isFirebaseInitialized = true;
 

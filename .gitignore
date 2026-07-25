@@ -43,3 +43,10 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Secrets / API Keys
+# -------------------
+# Dart secrets (copy secrets.example.dart to secrets.dart with real values)
+lib/core/constants/secrets.dart
+# Android Google Maps API key (copy google_maps_api.example.xml to google_maps_api.xml)
+android/app/src/main/res/values/google_maps_api.xml

@@ -1016,7 +1016,7 @@ class _DriverSettingsScreenState extends State<DriverSettingsScreen> with Single
                                       ),
                                     ),
                                     const SizedBox(width: 16),
-                                    const Text('Packup: ', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
+                                    const Text('Drop: ', style: TextStyle(fontSize: 11, color: AppTheme.textMuted)),
                                     Text(
                                       dropTime,
                                       style: TextStyle(

@@ -206,7 +206,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<VehicleModel> getVehicle(String vehicleId) async {
     try {
-      final doc = await _firestore.collection('vehicles').doc(vehicleId).get();
+      final doc =       await _firestore.collection(AppConstants.vehiclesCollection).doc(vehicleId).get();
       if (!doc.exists || doc.data() == null) {
         throw const ServerFailure('Vehicle details not found.');
       }
@@ -219,7 +219,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateVehicleLocation(String vehicleId, double latitude, double longitude) async {
     try {
-      await _firestore.collection('vehicles').doc(vehicleId).update({
+      await _firestore.collection(AppConstants.vehiclesCollection).doc(vehicleId).update({
         'currentLatitude': latitude,
         'currentLongitude': longitude,
         'lastUpdated': DateTime.now().toIso8601String(),
@@ -231,7 +231,7 @@ class FirebaseFirestoreService implements FirestoreService {
 
   @override
   Stream<VehicleModel> streamVehicle(String vehicleId) {
-    return _firestore.collection('vehicles').doc(vehicleId).snapshots().map((doc) {
+    return _firestore.collection(AppConstants.vehiclesCollection).doc(vehicleId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) {
         throw const ServerFailure('Vehicle data stream error.');
       }
@@ -242,7 +242,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<TripModel> getTrip(String tripId) async {
     try {
-      final doc = await _firestore.collection('trips').doc(tripId).get();
+      final doc = await _firestore.collection(AppConstants.tripsCollection).doc(tripId).get();
       if (!doc.exists || doc.data() == null) {
         throw const ServerFailure('Trip route details not found.');
       }
@@ -255,7 +255,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateTripStatus(String tripId, TripStatus status) async {
     try {
-      await _firestore.collection('trips').doc(tripId).update({
+      await _firestore.collection(AppConstants.tripsCollection).doc(tripId).update({
         'status': status.name,
         if (status == TripStatus.active) 'startTime': DateTime.now().toIso8601String(),
         if (status == TripStatus.completed) 'endTime': DateTime.now().toIso8601String(),
@@ -268,7 +268,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateTripLocation(String tripId, double latitude, double longitude) async {
     try {
-      await _firestore.collection('trips').doc(tripId).update({
+      await _firestore.collection(AppConstants.tripsCollection).doc(tripId).update({
         'currentLatitude': latitude,
         'currentLongitude': longitude,
       });
@@ -280,7 +280,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateTripRouteName(String tripId, String routeName) async {
     try {
-      await _firestore.collection('trips').doc(tripId).update({
+      await _firestore.collection(AppConstants.tripsCollection).doc(tripId).update({
         'routeName': routeName,
       });
     } catch (e) {
@@ -290,7 +290,7 @@ class FirebaseFirestoreService implements FirestoreService {
 
   @override
   Stream<TripModel> streamTrip(String tripId) {
-    return _firestore.collection('trips').doc(tripId).snapshots().map((doc) {
+    return _firestore.collection(AppConstants.tripsCollection).doc(tripId).snapshots().map((doc) {
       if (!doc.exists || doc.data() == null) {
         throw const ServerFailure('Trip tracking stream error.');
       }
@@ -301,7 +301,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> createScanLog(ScanLogModel log) async {
     try {
-      await _firestore.collection('scan_logs').doc(log.id).set(log.toJson());
+      await _firestore.collection(AppConstants.scanLogsCollection).doc(log.id).set(log.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -311,7 +311,7 @@ class FirebaseFirestoreService implements FirestoreService {
   Future<List<ScanLogModel>> getScanLogsForStudent(String studentId) async {
     try {
       final snap = await _firestore
-          .collection('scan_logs')
+          .collection(AppConstants.scanLogsCollection)
           .where('studentId', isEqualTo: studentId)
           .get();
       final logs = snap.docs.map((doc) => ScanLogModel.fromJson(doc.data(), doc.id)).toList();
@@ -326,7 +326,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> sendMessage(MessageModel message) async {
     try {
-      await _firestore.collection('messages').doc(message.id).set(message.toJson());
+      await _firestore.collection(AppConstants.messagesCollection).doc(message.id).set(message.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -335,7 +335,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Stream<List<MessageModel>> streamMessages(String senderId, String receiverId) {
     return _firestore
-        .collection('messages')
+        .collection(AppConstants.messagesCollection)
         .where('senderId', whereIn: [senderId, receiverId])
         .snapshots()
         .map((snap) {
@@ -358,7 +358,7 @@ class FirebaseFirestoreService implements FirestoreService {
         final students = await getStudentsForParent(currentUserId);
         final driverIds = <String>{};
         
-        final tripsSnap = await _firestore.collection('trips').get();
+        final tripsSnap = await _firestore.collection(AppConstants.tripsCollection).get();
         for (var doc in tripsSnap.docs) {
           final trip = TripModel.fromJson(doc.data(), doc.id);
           final intersection = trip.studentIds.toSet().intersection(students.map((s) => s.id).toSet());
@@ -383,7 +383,7 @@ class FirebaseFirestoreService implements FirestoreService {
         return partners;
       } else {
         final tripsSnap = await _firestore
-            .collection('trips')
+            .collection(AppConstants.tripsCollection)
             .where('driverId', isEqualTo: currentUserId)
             .get();
         
@@ -424,7 +424,7 @@ class FirebaseFirestoreService implements FirestoreService {
   Future<void> markMessagesAsRead(String senderId, String receiverId) async {
     try {
       final snap = await _firestore
-          .collection('messages')
+          .collection(AppConstants.messagesCollection)
           .where('senderId', isEqualTo: senderId)
           .where('receiverId', isEqualTo: receiverId)
           .where('isRead', isEqualTo: false)
@@ -443,7 +443,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> submitFeedback(FeedbackModel feedback) async {
     try {
-      await _firestore.collection('feedback').doc(feedback.id).set(feedback.toJson());
+      await _firestore.collection(AppConstants.feedbackCollection).doc(feedback.id).set(feedback.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -452,7 +452,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Stream<List<FeedbackModel>> streamAllFeedback() {
     return _firestore
-        .collection('feedback')
+        .collection(AppConstants.feedbackCollection)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snap) => snap.docs.map((doc) => FeedbackModel.fromJson(doc.data(), doc.id)).toList());
@@ -462,7 +462,7 @@ class FirebaseFirestoreService implements FirestoreService {
   Future<List<BillingModel>> getBillingRecords(String parentId) async {
     try {
       final snap = await _firestore
-          .collection('billing')
+          .collection(AppConstants.billingCollection)
           .where('parentId', isEqualTo: parentId)
           .get();
       return snap.docs
@@ -477,7 +477,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Stream<List<BillingModel>> streamBillingRecords(String parentId) {
     return _firestore
-        .collection('billing')
+        .collection(AppConstants.billingCollection)
         .where('parentId', isEqualTo: parentId)
         .snapshots()
         .map((snap) => snap.docs
@@ -493,7 +493,7 @@ class FirebaseFirestoreService implements FirestoreService {
       if (paymentMethod != null) {
         data['paymentMethod'] = paymentMethod;
       }
-      await _firestore.collection('billing').doc(billId).update(data);
+      await _firestore.collection(AppConstants.billingCollection).doc(billId).update(data);
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -504,7 +504,7 @@ class FirebaseFirestoreService implements FirestoreService {
     if (parentIds.isEmpty) return [];
     try {
       final snap = await _firestore
-          .collection('billing')
+          .collection(AppConstants.billingCollection)
           .where('parentId', whereIn: parentIds)
           .get();
       return snap.docs
@@ -520,7 +520,7 @@ class FirebaseFirestoreService implements FirestoreService {
   Stream<List<BillingModel>> streamBillingRecordsForParents(List<String> parentIds) {
     if (parentIds.isEmpty) return Stream.value([]);
     return _firestore
-        .collection('billing')
+        .collection(AppConstants.billingCollection)
         .where('parentId', whereIn: parentIds)
         .snapshots()
         .map((snap) => snap.docs
@@ -532,7 +532,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> createBillingRecord(BillingModel bill) async {
     try {
-      await _firestore.collection('billing').doc(bill.id).set(bill.toJson());
+      await _firestore.collection(AppConstants.billingCollection).doc(bill.id).set(bill.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -541,7 +541,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> updateBillingRecord(BillingModel bill) async {
     try {
-      await _firestore.collection('billing').doc(bill.id).update(bill.toJson());
+      await _firestore.collection(AppConstants.billingCollection).doc(bill.id).update(bill.toJson());
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -550,7 +550,7 @@ class FirebaseFirestoreService implements FirestoreService {
   @override
   Future<void> deleteBillingRecord(String billId) async {
     try {
-      await _firestore.collection('billing').doc(billId).update({'status': 'deleted'});
+      await _firestore.collection(AppConstants.billingCollection).doc(billId).update({'status': 'deleted'});
     } catch (e) {
       throw ServerFailure(e.toString());
     }
@@ -560,7 +560,7 @@ class FirebaseFirestoreService implements FirestoreService {
   Future<bool> hasBillingRecordForMonth(String studentId, int year, int month) async {
     try {
       final snap = await _firestore
-          .collection('billing')
+          .collection(AppConstants.billingCollection)
           .where('studentId', isEqualTo: studentId)
           .get();
       return snap.docs.any((doc) {

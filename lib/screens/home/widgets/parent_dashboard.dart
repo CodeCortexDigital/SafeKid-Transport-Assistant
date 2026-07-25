@@ -189,7 +189,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
                       const SizedBox(height: 12),
                       // Drop Time selection
                       const Text(
-                        'Tomorrow\'s Packup / Drop Time',
+                        'Tomorrow\'s Dismissal Time',
                         style: TextStyle(fontSize: 12, color: AppTheme.textSecondary, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 4),
@@ -849,7 +849,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
               ),
             ],
             const SizedBox(height: 20),
-            // Tomorrow's Class & Packup Timings Box (Always Visible)
+            // Tomorrow's Schedule Timings Box (Always Visible)
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -947,7 +947,7 @@ class _ParentDashboardState extends State<ParentDashboard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  'Packup / Dismiss',
+                                  'Dismissal',
                                   style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                                 ),
                                 Text(

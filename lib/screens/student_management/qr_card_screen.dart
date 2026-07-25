@@ -1,10 +1,8 @@
-import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../models/student_model.dart';
 import '../../core/theme/app_theme.dart';
@@ -300,19 +298,16 @@ class QrCardScreen extends StatelessWidget {
 
       if (pngBytes == null) throw Exception('Image capture failed.');
 
-      if (kIsWeb) {
-        await Share.share('SafeKid Safety Pass details for $studentName.');
-      } else {
-        final tempDir = await getTemporaryDirectory();
-        final filePath = '${tempDir.path}/SafeKid_${studentName.replaceAll(' ', '_')}_Pass.png';
-        final file = File(filePath);
-        await file.writeAsBytes(pngBytes);
+      final xFile = XFile.fromData(
+        pngBytes,
+        name: 'SafeKid_${studentName.replaceAll(' ', '_')}_Pass.png',
+        mimeType: 'image/png',
+      );
 
-        await Share.shareXFiles(
-          [XFile(filePath)],
-          text: 'Here is the SafeKid Transit Pass for $studentName.',
-        );
-      }
+      await Share.shareXFiles(
+        [xFile],
+        text: 'Here is the SafeKid Transit Pass for $studentName.',
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(

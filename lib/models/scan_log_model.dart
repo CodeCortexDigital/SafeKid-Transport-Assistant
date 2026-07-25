@@ -2,7 +2,7 @@ class ScanLogModel {
   final String id;
   final String studentId;
   final String scannerId;
-  final String scanType; // checkIn, checkOut
+  final String scanType; // pickup, schoolArrival, schoolDeparture, homeDrop
   final DateTime timestamp;
   final double latitude;
   final double longitude;

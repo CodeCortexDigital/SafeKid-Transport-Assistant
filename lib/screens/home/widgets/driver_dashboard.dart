@@ -504,7 +504,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         Row(
                           children: [
                             const Text(
-                              'Starts: ',
+                              'Pickup: ',
                               style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
                             ),
                             Text(
@@ -521,7 +521,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         Row(
                           children: [
                             const Text(
-                              'Packup: ',
+                              'Drop: ',
                               style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
                             ),
                             Text(
@@ -1538,7 +1538,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     } catch (_) {}
 
     final nextStatus = isPickup ? StudentStatus.inTransit : (student.pickupPoint == student.dropPoint || student.dropPoint.contains('School') ? StudentStatus.atSchool : StudentStatus.home);
-    final scanType = isPickup ? 'pickup' : (nextStatus == StudentStatus.atSchool ? 'school_arrival' : 'home_drop');
+    final scanType = isPickup ? 'pickup' : (nextStatus == StudentStatus.atSchool ? 'schoolArrival' : 'homeDrop');
 
     final log = ScanLogModel(
       id: 'log-${DateTime.now().millisecondsSinceEpoch}',
@@ -1563,8 +1563,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       NotificationService().triggerNotification(
         title: isPickup ? '🚐 Van Arriving for Pickup' : '🚐 Van Arrived at Drop-off Stop',
         body: isPickup
-            ? 'The school van has reached the stop "${stopName}". Please make sure ${student.name} is ready for boarding.'
-            : 'The school van has reached the stop "${stopName}" to drop ${student.name}.',
+            ? 'The school van has reached the stop "$stopName". Please make sure ${student.name} is ready for boarding.'
+            : 'The school van has reached the stop "$stopName" to drop ${student.name}.',
         studentId: student.id,
       );
     }
@@ -1856,7 +1856,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
         final scanType = nextStatus == StudentStatus.inTransit 
             ? 'pickup' 
-            : (nextStatus == StudentStatus.atSchool ? 'school_arrival' : 'home_drop');
+            : (nextStatus == StudentStatus.atSchool ? 'schoolArrival' : 'homeDrop');
         final log = ScanLogModel(
           id: 'log-${DateTime.now().millisecondsSinceEpoch}-$id',
           studentId: id,
@@ -1957,7 +1957,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     try {
       final scanType = nextStatus == StudentStatus.inTransit 
           ? 'pickup' 
-          : (nextStatus == StudentStatus.atSchool ? 'school_arrival' : 'home_drop');
+          : (nextStatus == StudentStatus.atSchool ? 'schoolArrival' : 'homeDrop');
       
       final log = ScanLogModel(
         id: 'log-${DateTime.now().millisecondsSinceEpoch}',
