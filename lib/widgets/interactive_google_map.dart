@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
 import '../models/trip_model.dart';
 import '../core/theme/app_theme.dart';
@@ -14,7 +15,7 @@ class InteractiveGoogleMap extends StatefulWidget {
   final TripStatus tripStatus;
   final String etaMinutes;
   final double? pickupLatitude;
-  final double? pickupLongitude;
+  final double pickupLongitude;
   final double schoolLatitude;
   final double schoolLongitude;
   final String childName;
@@ -37,33 +38,34 @@ class InteractiveGoogleMap extends StatefulWidget {
 }
 
 class _InteractiveGoogleMapState extends State<InteractiveGoogleMap> {
-  GoogleMapController? _mapController;
-  final Completer<GoogleMapController> _controllerCompleter = Completer<GoogleMapController>();
+  final MapController _mapController = MapController();
+  bool _mapReady = false;
 
   @override
   void didUpdateWidget(covariant InteractiveGoogleMap oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.currentLatitude != widget.currentLatitude ||
-        oldWidget.currentLongitude != widget.currentLongitude) {
+    if (_mapReady &&
+        (oldWidget.currentLatitude != widget.currentLatitude ||
+            oldWidget.currentLongitude != widget.currentLongitude)) {
       _animateToPosition();
     }
   }
 
-  void _animateToPosition() async {
-    if (_mapController != null) {
-      double lat = widget.currentLatitude;
-      double lng = widget.currentLongitude;
-      
-      // Fallback if driver location is uninitialized
-      if (lat == 0.0 || lng == 0.0) {
-        lat = widget.pickupLatitude ?? widget.schoolLatitude;
-        lng = widget.pickupLongitude ?? widget.schoolLongitude;
-      }
-      
-      if (lat != 0.0 && lng != 0.0) {
-        final cameraUpdate = CameraUpdate.newLatLng(LatLng(lat, lng));
-        await _mapController!.animateCamera(cameraUpdate);
-      }
+  void _animateToPosition() {
+    double lat = widget.currentLatitude;
+    double lng = widget.currentLongitude;
+
+    // Fallback if driver location is uninitialized
+    if (lat == 0.0 || lng == 0.0) {
+      lat = widget.pickupLatitude ?? widget.schoolLatitude;
+      lng = widget.pickupLongitude ?? widget.schoolLongitude;
+    }
+
+    if (lat != 0.0 && lng != 0.0) {
+      _mapController.animateTo(
+        target: LatLng(lat, lng),
+        zoom: 14.5,
+      );
     }
   }
 
@@ -86,9 +88,9 @@ class _InteractiveGoogleMapState extends State<InteractiveGoogleMap> {
     }
 
     // Determine platform target
-    final isDesktop = !kIsWeb && 
-        (defaultTargetPlatform != TargetPlatform.android && 
-         defaultTargetPlatform != TargetPlatform.iOS);
+    final isDesktop = !kIsWeb &&
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS);
 
     if (isDesktop) {
       // High-fidelity fallback schema for Windows/Mac desktop testing
@@ -119,69 +121,101 @@ class _InteractiveGoogleMapState extends State<InteractiveGoogleMap> {
       );
     }
 
-    // Interactive Google Map for Web & Mobile
+    // Interactive OpenStreetMap (free, no API key) for Web & Mobile
     final LatLng driverLatLng = LatLng(widget.currentLatitude, widget.currentLongitude);
     final LatLng schoolLatLng = LatLng(widget.schoolLatitude, widget.schoolLongitude);
     final LatLng? pickupLatLng = (pLat != null && pLng != null) ? LatLng(pLat, pLng) : null;
 
-    final Set<Marker> markers = {
+    final List<Marker> markers = [
       Marker(
-        markerId: const MarkerId('driver'),
-        position: driverLatLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
-        infoWindow: const InfoWindow(title: 'School Bus (Driver)'),
+        point: driverLatLng,
+        width: 40,
+        height: 40,
+        child: const Icon(
+          Icons.directions_bus_rounded,
+          color: Colors.orange,
+          size: 32,
+        ),
       ),
       Marker(
-        markerId: const MarkerId('school'),
-        position: schoolLatLng,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        infoWindow: const InfoWindow(title: 'School'),
+        point: schoolLatLng,
+        width: 40,
+        height: 40,
+        child: const Icon(
+          Icons.school_rounded,
+          color: Colors.blue,
+          size: 32,
+        ),
       ),
       if (pickupLatLng != null)
         Marker(
-          markerId: const MarkerId('pickup'),
-          position: pickupLatLng,
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-          infoWindow: InfoWindow(title: '${widget.childName}\'s Pickup Point'),
+          point: pickupLatLng,
+          width: 40,
+          height: 40,
+          child: const Icon(
+            Icons.home_rounded,
+            color: Colors.green,
+            size: 32,
+          ),
         ),
-    };
+    ];
 
-    // Connect markers with visual route lines
-    final Set<Polyline> polylines = {
+    final List<Polyline> polylines = [
       Polyline(
-        polylineId: const PolylineId('route_path'),
         color: AppTheme.primaryLight,
-        width: 5,
+        strokeWidth: 5,
         points: [
           schoolLatLng,
           if (pickupLatLng != null) pickupLatLng,
           driverLatLng,
         ],
       ),
-    };
+    ];
 
     return Stack(
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: driverLatLng,
-              zoom: 14.5,
+          child: FlutterMap(
+            mapController: _mapController,
+            options: MapOptions(
+              initialCenter: driverLatLng,
+              initialZoom: 14.5,
+              onMapReady: () {
+                _mapReady = true;
+                _animateToPosition();
+              },
             ),
-            markers: markers,
-            polylines: polylines,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapType: MapType.normal, // Standard map mode
-            onMapCreated: (controller) {
-              _mapController = controller;
-              _controllerCompleter.complete(controller);
-              _animateToPosition();
-            },
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.safekid.transport',
+              ),
+              PolylineLayer(polylines: polylines),
+              MarkerLayer(markers: markers),
+            ],
           ),
         ),
         _buildOverlayCard(distanceMeters, etaMinutes),
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.55),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Text(
+              '© OpenStreetMap contributors',
+              style: TextStyle(
+                fontSize: 9,
+                color: Colors.white70,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ),
+        ),
       ],
     );
   }
@@ -283,7 +317,7 @@ class _InteractiveGoogleMapState extends State<InteractiveGoogleMap> {
   }
 }
 
-// Canvas painter representation for platforms where Google Maps is not compiled (Windows simulator fallback)
+// Canvas painter representation for platforms where maps are not compiled (Windows simulator fallback)
 class _FallbackMapPainter extends CustomPainter {
   final double schoolLat;
   final double schoolLng;
@@ -312,13 +346,13 @@ class _FallbackMapPainter extends CustomPainter {
     final paint = Paint()
       ..color = AppTheme.surfaceColor
       ..style = PaintingStyle.fill;
-    
+
     // Background card container
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, size.height), 
+        Rect.fromLTWH(0, 0, size.width, size.height),
         const Radius.circular(16),
-      ), 
+      ),
       paint,
     );
 
@@ -326,7 +360,7 @@ class _FallbackMapPainter extends CustomPainter {
     final gridPaint = Paint()
       ..color = Colors.white.withValues(alpha: 0.03)
       ..strokeWidth = 1;
-    
+
     for (double i = 0; i < size.width; i += 40) {
       canvas.drawLine(Offset(i, 0), Offset(i, size.height), gridPaint);
     }
@@ -344,15 +378,15 @@ class _FallbackMapPainter extends CustomPainter {
       ..strokeWidth = 6
       ..strokeCap = StrokeCap.round
       ..style = PaintingStyle.stroke;
-    
+
     final Path path = Path();
     path.moveTo(schoolOffset.dx, schoolOffset.dy);
     path.quadraticBezierTo(
-      size.width * 0.35, size.height * 0.35, 
+      size.width * 0.35, size.height * 0.35,
       pickupOffset.dx, pickupOffset.dy,
     );
     path.quadraticBezierTo(
-      size.width * 0.65, size.height * 0.65, 
+      size.width * 0.65, size.height * 0.65,
       homeOffset.dx, homeOffset.dy,
     );
     canvas.drawPath(path, routePaint);
@@ -404,22 +438,22 @@ class _FallbackMapPainter extends CustomPainter {
       final tagRect = Rect.fromLTWH(busOffset.dx - 50, busOffset.dy - 35, 100, 18);
       nodePaint.color = AppTheme.cardColor;
       canvas.drawRRect(RRect.fromRectAndRadius(tagRect, const Radius.circular(4)), nodePaint);
-      
+
       _drawText(
-        canvas, 
-        Offset(busOffset.dx - 45, busOffset.dy - 33), 
-        etaMinutes == 0 ? 'Arrived' : '$etaMinutes min away', 
-        AppTheme.textPrimary, 
-        8, 
+        canvas,
+        Offset(busOffset.dx - 45, busOffset.dy - 33),
+        etaMinutes == 0 ? 'Arrived' : '$etaMinutes min away',
+        AppTheme.textPrimary,
+        8,
         FontWeight.bold,
       );
     } else {
       _drawText(
-        canvas, 
-        Offset(size.width * 0.5 - 110, size.height * 0.2), 
-        'TRACKER IDLE • WAITING FOR ACTIVE TRIP', 
-        AppTheme.textMuted, 
-        10, 
+        canvas,
+        Offset(size.width * 0.5 - 110, size.height * 0.2),
+        'TRACKER IDLE • WAITING FOR ACTIVE TRIP',
+        AppTheme.textMuted,
+        10,
         FontWeight.bold,
       );
     }

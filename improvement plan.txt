@@ -1,0 +1,76 @@
+Audit Summary — SafeKid Transport Assistant
+✅ What Works (Fully Functional)
+Feature	Details
+Auth	Phone OTP, Google Sign-In, Biometric login, profile setup
+Student Management	Full CRUD, OTP linking, search, timings, attendance
+QR Scanning	4 event types (pickup, schoolArrival, schoolDeparture, homeDrop)
+QR Pass Cards	Generate, save as image, share
+Chat	Real-time messaging, conversation list, unread badges
+Chatbot	Rule-based helper for billing/transport queries
+AI Notifications	6 templates, 4 tones, draft generator
+Billing	Invoice tracking, pay/mark-paid, auto-generate monthly bills
+Feedback	Star ratings (driver, safety, punctuality), comments
+Driver Performance	Score calculation, gauge widget
+Dashboards	Role-based (parent/driver/assistant) with bottom nav (5 tabs)
+Five-Tab Nav	Home · Students · Pick/Drop · Chat · Settings
+🔴 Critical Issues (Blockers)
+#	Issue
+1	No real database — MockFirestoreService is the only implementation; all data lost on restart
+2	No google-services.json (Android) or GoogleService-Info.plist (iOS) — app can't connect to Firebase on device
+3	API key still hardcoded in web/index.html — exposed in git history, needs extraction
+4	iOS permissions missing — no NSLocationWhenInUseUsageDescription, NSLocationAlwaysAndWhenInUseUsageDescription, NSFaceIDUsageDescription
+5	No production Firestore service — MockFirestoreService returns fake data for everything
+🟡 Medium Priority
+#	Issue
+6	No offline support — zero caching, no connectivity_plus
+7	No tests — zero unit/widget/integration tests
+8	No localization — 500+ strings hardcoded in English
+9	Background location not configured — no ACCESS_BACKGROUND_LOCATION on Android, no UIBackgroundModes on iOS
+10	4 massive files (~55KB each) — parent_dashboard.dart, driver_dashboard.dart, student_management_screen.dart, driver_settings_screen.dart, qr_scanner_screen.dart
+11	Firebase Security Rules missing — no firestore.rules or storage.rules in repo
+12	No role-based access control — fetchAllStudents() returns everything to any user
+13	Mock/hardcoded trip ID — 'mock-ride-1' in 5+ files
+14	Memory leak — Timer created in AttendanceProvider constructor, never disposed
+15	Orphan app/ directory — separate Kotlin native project tracked in git root
+16	responsive_layout.dart never used — written but zero screens reference it
+🟢 Low Priority / Polish
+#	Issue
+17	2 lint rules suppressed (deprecated_member_use, use_build_context_synchronously)
+18	Inconsistent widget usage — mix of GlassCard and raw Container, CustomButton and ElevatedButton
+19	Some navigation routes hardcoded as strings instead of constants
+20	No onboarding/walkthrough screens
+21	No edit profile / change password / change phone screens
+22	No SOS/emergency alert feature
+23	No geofencing for pickup/drop zones
+24	No trip history or analytics dashboard
+25	No multi-vehicle fleet view
+26	No admin/user management role
+Priority Action Plan
+Week 1 (Blockers):
+├── 🔴 Build real FirestoreService implementation 
+├── 🔴 Add google-services.json + GoogleService-Info.plist
+├── 🔴 Extract API key from web/index.html
+├── 🔴 Add iOS permission descriptions
+└── 🔴 Write working Firebase initialization
+
+Week 2 (Core Stability):
+├── 🟡 Add offline support (sqflite/hive + connectivity)
+├── 🟡 Add Firebase Security Rules
+├── 🟡 Fix attendance provider Timer leak
+├── 🟡 Replace all 'mock-ride-1' with dynamic trip ID
+└── 🟡 Write basic unit tests for models/services
+
+Week 3 (Quality):
+├── 🟡 Split 4 largest files (~55KB each) into focused modules
+├── 🟡 Add background location tracking
+├── 🟡 Add Google Sign-In fix (remove -dummy suffix)
+├── 🟢 Remove orphan app/ directory
+└── 🟢 Re-enable suppressed lints
+
+Week 4 (Polish):
+├── 🟢 Add localization (flutter_localizations)
+├── 🟢 Add onboarding screens
+├── 🟢 Add profile management screens
+├── 🟢 Use responsive_layout.dart
+└── 🟢 Add SOS/emergency feature
+Total: ~62 Dart files, ~16-18K LoC. The app has a solid foundation but needs a production database service, config files, and offline support before it can ship.
